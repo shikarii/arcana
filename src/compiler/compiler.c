@@ -22,6 +22,9 @@ typedef struct {
     uint16_t current_func;
     int      stack_depth;
     int      max_stack;
+
+    /* Debug metadata: track which function is being compiled */
+    uint16_t debug_func_idx;
 } Compiler;
 
 static void cerr(Compiler* c, const char* fmt, ...) {
@@ -185,6 +188,7 @@ static void compile_node(Compiler* c, ArcNodeId node_id) {
         cerr(c, "invalid node id %u", node_id); return;
     }
     const ArcNode* n = &c->graph->nodes[node_id];
+    uint32_t debug_start = (uint32_t)c->code.len;
 
     switch (n->kind) {
     case ARC_NODE_CONST_INT: {
@@ -303,6 +307,34 @@ static void compile_node(Compiler* c, ArcNodeId node_id) {
         break;
     }
 
+    case ARC_NODE_WHILE: {
+        /* Loop top: compile condition */
+        uint32_t loop_top = (uint32_t)c->code.len;
+
+        ArcPortId cond_port = find_port_by_role(c->graph, node_id, "cond", ARC_PORT_INPUT);
+        ArcNodeId cond_src = find_source_node(c->graph, cond_port);
+        if (cond_src != ARC_INVALID_ID) compile_node(c, cond_src);
+
+        uint32_t exit_jump = emit_jump(c, OP_JUMP_IF_FALSE);
+
+        /* Compile body region */
+        compile_region_stmts(c, n->attr.loop.body_region);
+
+        /* Jump back to loop top */
+        emit_op(c, OP_JUMP);
+        int32_t back_offset = (int32_t)loop_top - (int32_t)(c->code.len + 4);
+        emit_i32(c, back_offset);
+
+        patch_jump(c, exit_jump);
+        break;
+    }
+
+    case ARC_NODE_SEQUENCE: {
+        /* Sequence node: compile children in order via edges or region */
+        /* For now, sequence is handled by region iteration */
+        break;
+    }
+
     case ARC_NODE_RETURN: {
         ArcPortId val_port = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
         if (val_port != ARC_INVALID_ID) {
@@ -375,6 +407,18 @@ static void compile_node(Compiler* c, ArcNodeId node_id) {
         cerr(c, "unsupported node kind %d at node %u", n->kind, node_id);
         break;
     }
+
+    /* Emit debug source map entry if we generated any code */
+    uint32_t debug_end = (uint32_t)c->code.len;
+    if (debug_end > debug_start && n->source_id != 0) {
+        ArcDebugEntry de = {
+            .func_idx = c->debug_func_idx,
+            .bc_start = debug_start,
+            .bc_end = debug_end,
+            .element_id = n->source_id
+        };
+        arc_debug_table_add(&c->image.debug, de);
+    }
 }
 
 /* --- Compile a function definition --- */
@@ -394,6 +438,7 @@ static void compile_function(Compiler* c, ArcNodeId func_node_id) {
     uint16_t func_idx = arc_func_table_add(&c->image.functions, (ArcFuncRecord){
         .name_const_idx = name_ci, .arity = fn->attr.func.arity
     });
+    c->debug_func_idx = func_idx;
 
     /* Add parameters as locals */
     ArcRegionId body_rid = fn->attr.func.body_region;
@@ -450,6 +495,7 @@ ArcCompileResult arc_compile(const ArcGraph* graph) {
     c.max_stack = 0;
 
     uint16_t main_name = arc_const_pool_add_string(&c.image.constants, "main", 4);
+    c.debug_func_idx = 0; /* will be adjusted when we insert main at index 0 */
     uint32_t main_start = (uint32_t)c.code.len;
 
     const ArcRegion* root = &graph->regions[graph->root_region];
@@ -512,6 +558,12 @@ ArcCompileResult arc_compile(const ArcGraph* graph) {
                 c.code.data[ip + 2] = (uint8_t)(fi >> 8);
             }
             ip += 1 + (uint32_t)ob;
+        }
+
+        /* Patch debug table func_idx: increment by 1 for shifted functions */
+        for (uint32_t di = 0; di < c.image.debug.count; di++) {
+            if (c.image.debug.entries[di].bc_start < main_start)
+                c.image.debug.entries[di].func_idx += 1;
         }
     } else {
         arc_func_table_add(&c.image.functions, main_rec);

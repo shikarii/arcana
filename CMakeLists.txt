@@ -7,6 +7,7 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # --- Compiler flags ---
 if(MSVC)
     add_compile_options(/W4)
+    add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
     add_compile_options(-Wall -Wextra -Werror -Wno-unused-parameter)
 endif()
@@ -53,6 +54,20 @@ target_link_libraries(arcana_tests
     arcana_semantic_graph
     arcana_compiler
 )
+
+# --- CLI tools ---
+add_executable(arcana-run tools/arcana-run.c)
+target_link_libraries(arcana-run arcana_bytecode arcana_vm arcana_verifier)
+
+add_executable(arcana-dis tools/arcana-dis.c)
+target_link_libraries(arcana-dis arcana_bytecode)
+
+add_executable(arcana-verify tools/arcana-verify.c)
+target_link_libraries(arcana-verify arcana_bytecode arcana_verifier)
+
+# --- Assembler ---
+add_executable(arcana-asm tools/arcana-asm.c)
+target_link_libraries(arcana-asm arcana_bytecode)
 
 enable_testing()
 add_test(NAME arcana_tests COMMAND arcana_tests)
