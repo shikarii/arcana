@@ -776,7 +776,6 @@ TEST(test_e2e_if_else) {
     /* Body: IF node */
     ArcNodeId n_if = arc_graph_add_node(&g, ARC_NODE_IF, r_body, 4014);
     ArcPortId p_if_cond = arc_graph_add_port(&g, n_if, ARC_PORT_INPUT, "cond");
-    n_if; /* avoid warning */
     g.nodes[n_if].attr.branch.then_region = r_then;
     g.nodes[n_if].attr.branch.else_region = r_else;
 

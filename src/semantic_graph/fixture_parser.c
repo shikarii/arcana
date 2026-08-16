@@ -19,7 +19,7 @@ typedef struct {
     uint32_t node_count;
 
     /* Port lookup: node_name.role -> port_id */
-    struct { char node[32]; char role[32]; ArcPortId id; ArcNodeId owner; } ports[1024];
+    struct { char node[64]; char role[64]; ArcPortId id; ArcNodeId owner; } ports[1024];
     uint32_t port_count;
 
     ArcGraph* graph;
@@ -57,8 +57,8 @@ static ArcPortId find_port(ParseState* s, const char* node_name, const char* rol
 static void register_port(ParseState* s, const char* node_name, const char* role,
                            ArcPortId pid, ArcNodeId owner) {
     if (s->port_count >= 1024) { perr(s, "too many ports"); return; }
-    snprintf(s->ports[s->port_count].node, 32, "%s", node_name);
-    snprintf(s->ports[s->port_count].role, 32, "%s", role);
+    snprintf(s->ports[s->port_count].node, 64, "%s", node_name);
+    snprintf(s->ports[s->port_count].role, 64, "%s", role);
     s->ports[s->port_count].id = pid;
     s->ports[s->port_count].owner = owner;
     s->port_count++;
