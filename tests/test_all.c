@@ -3507,7 +3507,7 @@ TEST(test_vm_closure_upvalue) {
     arc_image_init(&img);
 
     uint16_t ci_10 = arc_const_pool_add_i64(&img.constants, 10);
-    uint16_t ci_null = arc_const_pool_add_null(&img.constants);
+    arc_const_pool_add_null(&img.constants); /* ci_null, reserved for future use */
     uint16_t main_name = arc_const_pool_add_string(&img.constants, "main", 4);
     uint16_t inner_name = arc_const_pool_add_string(&img.constants, "inner", 5);
 

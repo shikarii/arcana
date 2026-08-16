@@ -51,23 +51,6 @@ static void tc_error(TcCtx* ctx, ArcNodeId node_id, const char* fmt, ...) {
     ctx->had_error = true;
 }
 
-static void tc_warning(TcCtx* ctx, ArcNodeId node_id, const char* fmt, ...) {
-    ArcDiagnostic* d = arc_diag_add(ctx->diags);
-    d->severity = ARC_DIAG_WARNING;
-    d->code = 3002; /* ARC-TYPE-0002 */
-    d->primary.node_id = node_id;
-    d->primary.element_id = node_id < ctx->graph->node_count
-        ? ctx->graph->nodes[node_id].source_id : 0;
-    d->primary.port_role = NULL;
-    d->related_count = 0;
-    d->note[0] = '\0';
-
-    va_list ap;
-    va_start(ap, fmt);
-    vsnprintf(d->message, sizeof(d->message), fmt, ap);
-    va_end(ap);
-}
-
 /* ===================================================================
  * Graph navigation helpers (same as compiler.c / semantic.c)
  * =================================================================== */
