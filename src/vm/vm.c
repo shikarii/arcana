@@ -571,6 +571,14 @@ ArcStatus arc_vm_run(ArcVm* vm) {
             uint8_t argc = read_byte(vm);
             (void)read_byte(vm); /* padding byte to fill 4 operand bytes */
 
+            /* Check if callee is a closure on the stack */
+            if (func_idx == 0xFFFF && vm->sp > argc) {
+                ArcValue callee_v = vm->stack[vm->sp - argc - 1];
+                if (ARC_IS_CLOSURE(callee_v)) {
+                    func_idx = ARC_AS_CLOSURE(callee_v)->func_idx;
+                }
+            }
+
             if (func_idx >= vm->image->functions.count) {
                 vm_error(vm, "invalid function index %u", func_idx); return ARC_ERR_RUNTIME;
             }
@@ -607,6 +615,20 @@ ArcStatus arc_vm_run(ArcVm* vm) {
             ArcValue result;
             if (!vm_pop(vm, &result)) return ARC_ERR_RUNTIME;
 
+            /* Close any open upvalues in this frame's locals */
+            uint32_t base = vm->frames[vm->fp - 1].base_slot;
+            ArcObjUpvalue** pp = &vm->open_upvalues;
+            while (*pp) {
+                if ((*pp)->location >= &vm->stack[base]) {
+                    ArcObjUpvalue* uv = *pp;
+                    uv->closed = *uv->location;
+                    uv->location = &uv->closed;
+                    *pp = uv->next;
+                } else {
+                    pp = &(*pp)->next;
+                }
+            }
+
             vm->fp--;
             if (vm->fp == 0) {
                 /* Returning from main */
@@ -629,21 +651,85 @@ ArcStatus arc_vm_run(ArcVm* vm) {
             if (func_idx >= vm->image->functions.count) {
                 vm_error(vm, "closure: invalid function index %u", func_idx); return ARC_ERR_RUNTIME;
             }
-            ArcObjClosure* cl = arc_obj_closure_new(&vm->gc, func_idx, 0);
+            const ArcFuncRecord* fn = &vm->image->functions.funcs[func_idx];
+            ArcObjClosure* cl = arc_obj_closure_new(&vm->gc, func_idx, fn->upvalue_count);
+            /* Capture upvalues from descriptors */
+            for (uint8_t i = 0; i < fn->upvalue_count; i++) {
+                const ArcUpvalueDesc* desc = &fn->upvalues[i];
+                if (desc->is_local) {
+                    /* Capture a local from the enclosing frame */
+                    uint32_t base = vm->frames[vm->fp - 1].base_slot;
+                    ArcValue* slot = &vm->stack[base + desc->index];
+                    /* Reuse existing open upvalue if one exists for this slot */
+                    ArcObjUpvalue* uv = vm->open_upvalues;
+                    while (uv && uv->location != slot) uv = uv->next;
+                    if (!uv) {
+                        uv = arc_obj_upvalue_new(&vm->gc, slot);
+                        uv->next = vm->open_upvalues;
+                        vm->open_upvalues = uv;
+                    }
+                    cl->upvalues[i] = uv;
+                } else {
+                    /* Capture an upvalue from the enclosing closure */
+                    ArcFrame* frame = &vm->frames[vm->fp - 1];
+                    /* The calling closure should be at the base of the current frame */
+                    ArcValue callee_v = vm->stack[frame->base_slot > 0 ? frame->base_slot - 1 : 0];
+                    if (ARC_IS_CLOSURE(callee_v)) {
+                        ArcObjClosure* encl = ARC_AS_CLOSURE(callee_v);
+                        if (desc->index < encl->upvalue_count) {
+                            cl->upvalues[i] = encl->upvalues[desc->index];
+                        }
+                    }
+                }
+            }
             if (!vm_push(vm, arc_val_obj((ArcObject*)cl))) return ARC_ERR_RUNTIME;
             break;
         }
         case OP_GET_UPVAL: {
-            (void)read_u16(vm); /* upvalue index — consume operand */
-            vm_error(vm, "get_upvalue: not yet fully wired"); return ARC_ERR_RUNTIME;
+            uint16_t idx = read_u16(vm);
+            /* Find the current closure from the call frame */
+            ArcFrame* frame = &vm->frames[vm->fp - 1];
+            ArcValue callee_v = vm->stack[frame->base_slot > 0 ? frame->base_slot - 1 : 0];
+            if (!ARC_IS_CLOSURE(callee_v)) {
+                vm_error(vm, "get_upvalue: not in a closure"); return ARC_ERR_RUNTIME;
+            }
+            ArcObjClosure* cl = ARC_AS_CLOSURE(callee_v);
+            if (idx >= cl->upvalue_count || !cl->upvalues[idx]) {
+                vm_error(vm, "get_upvalue: invalid index %u", idx); return ARC_ERR_RUNTIME;
+            }
+            if (!vm_push(vm, *cl->upvalues[idx]->location)) return ARC_ERR_RUNTIME;
+            break;
         }
         case OP_SET_UPVAL: {
-            (void)read_u16(vm); /* upvalue index — consume operand */
-            vm_error(vm, "set_upvalue: not yet fully wired"); return ARC_ERR_RUNTIME;
+            uint16_t idx = read_u16(vm);
+            ArcValue val; if (!vm_pop(vm, &val)) return ARC_ERR_RUNTIME;
+            ArcFrame* frame = &vm->frames[vm->fp - 1];
+            ArcValue callee_v = vm->stack[frame->base_slot > 0 ? frame->base_slot - 1 : 0];
+            if (!ARC_IS_CLOSURE(callee_v)) {
+                vm_error(vm, "set_upvalue: not in a closure"); return ARC_ERR_RUNTIME;
+            }
+            ArcObjClosure* cl = ARC_AS_CLOSURE(callee_v);
+            if (idx >= cl->upvalue_count || !cl->upvalues[idx]) {
+                vm_error(vm, "set_upvalue: invalid index %u", idx); return ARC_ERR_RUNTIME;
+            }
+            *cl->upvalues[idx]->location = val;
+            break;
         }
         case OP_CLOSE_UPVAL: {
-            /* Close the upvalue at the top of stack */
-            /* TODO: walk open_upvalues chain, close any pointing at sp-1 */
+            /* Close all open upvalues pointing at or above sp-1 */
+            if (vm->sp == 0) break;
+            ArcValue* slot = &vm->stack[vm->sp - 1];
+            ArcObjUpvalue** pp = &vm->open_upvalues;
+            while (*pp) {
+                if ((*pp)->location >= slot) {
+                    ArcObjUpvalue* uv = *pp;
+                    uv->closed = *uv->location;
+                    uv->location = &uv->closed;
+                    *pp = uv->next;
+                } else {
+                    pp = &(*pp)->next;
+                }
+            }
             break;
         }
 

@@ -12,6 +12,12 @@ else()
     add_compile_options(-Wall -Wextra -Werror -Wno-unused-parameter)
 endif()
 
+# --- Library: arcana_common ---
+add_library(arcana_common STATIC
+    src/common/arena.c
+)
+target_include_directories(arcana_common PUBLIC src)
+
 # --- Library: arcana_platform ---
 add_library(arcana_platform STATIC
     src/platform/platform.c
@@ -70,6 +76,12 @@ add_library(arcana_semantic STATIC
 )
 target_link_libraries(arcana_semantic PUBLIC arcana_semantic_graph arcana_hir)
 
+# --- Library: arcana_typecheck ---
+add_library(arcana_typecheck STATIC
+    src/typecheck/typecheck.c
+)
+target_link_libraries(arcana_typecheck PUBLIC arcana_semantic_graph)
+
 # --- Library: arcana_compiler ---
 add_library(arcana_compiler STATIC
     src/compiler/compiler.c
@@ -85,6 +97,7 @@ target_link_libraries(arcana_interpreter PUBLIC arcana_semantic_graph)
 # --- Test executable ---
 add_executable(arcana_tests
     tests/test_all.c
+    tests/test_runtime.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode
@@ -92,11 +105,13 @@ target_link_libraries(arcana_tests
     arcana_verifier
     arcana_semantic_graph
     arcana_compiler
+    arcana_typecheck
     arcana_interpreter
     arcana_hir
     arcana_mir
     arcana_semantic
     arcana_platform
+    arcana_common
 )
 
 # --- CLI tools ---

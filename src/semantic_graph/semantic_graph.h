@@ -45,6 +45,30 @@ typedef enum {
     ARC_NODE_PRINT,         /* intrinsic print */
     ARC_NODE_ROOT_OUTPUT,   /* root output / program result */
     ARC_NODE_SEQUENCE,      /* ordered statement sequence */
+    ARC_NODE_CONST_STRING,  /* literal string */
+    ARC_NODE_AND,           /* short-circuit logical and */
+    ARC_NODE_OR,            /* short-circuit logical or */
+    ARC_NODE_BIT_AND,       /* bitwise and */
+    ARC_NODE_BIT_OR,        /* bitwise or */
+    ARC_NODE_BIT_XOR,       /* bitwise xor */
+    ARC_NODE_BIT_NOT,       /* bitwise not (unary) */
+    ARC_NODE_SHL,           /* shift left */
+    ARC_NODE_SHR,           /* shift right */
+    ARC_NODE_CAST_I64,      /* cast to i64 */
+    ARC_NODE_CAST_F64,      /* cast to f64 */
+    ARC_NODE_CAST_STR,      /* cast to string */
+    ARC_NODE_ARRAY_LITERAL, /* array construction [a, b, c] */
+    ARC_NODE_MAP_LITERAL,   /* map construction {k: v, ...} */
+    ARC_NODE_INDEX_GET,     /* container[key] read */
+    ARC_NODE_INDEX_SET,     /* container[key] = value write */
+    ARC_NODE_STR_LEN,       /* string length */
+    ARC_NODE_STR_SLICE,     /* string slice */
+    ARC_NODE_STR_INDEX,     /* string character at index */
+    ARC_NODE_LENGTH,        /* container length (string/array/map) */
+    ARC_NODE_TRY,           /* try/catch block */
+    ARC_NODE_THROW,         /* throw exception */
+    ARC_NODE_CLOSURE,       /* closure expression (wraps func_def) */
+    ARC_NODE_INTRINSIC_CALL,/* intrinsic function call */
 } ArcNodeKind;
 
 /* --- Port direction --- */
@@ -77,6 +101,8 @@ typedef enum {
     ARC_REGION_THEN,        /* then branch of if */
     ARC_REGION_ELSE,        /* else branch of if */
     ARC_REGION_LOOP_BODY,   /* loop body */
+    ARC_REGION_TRY_BODY,    /* try block body */
+    ARC_REGION_CATCH_BODY,  /* catch block body */
 } ArcRegionKind;
 
 /* --- Region --- */
@@ -110,12 +136,12 @@ typedef struct {
         int64_t     int_value;      /* CONST_INT */
         double      float_value;    /* CONST_FLOAT */
         bool        bool_value;     /* CONST_BOOL */
-        const char* name;           /* LET, VAR_REF, ASSIGN, FUNC_DEF, PARAM */
+        const char* name;           /* LET, VAR_REF, ASSIGN, FUNC_DEF, PARAM, FUNC_CALL */
         struct {
             const char* name;
             ArcRegionId body_region;
             uint8_t     arity;
-        } func;                     /* FUNC_DEF */
+        } func;                     /* FUNC_DEF, CLOSURE */
         struct {
             ArcRegionId then_region;
             ArcRegionId else_region;
@@ -123,6 +149,20 @@ typedef struct {
         struct {
             ArcRegionId body_region;
         } loop;                     /* WHILE */
+        struct {
+            const char* data;
+            uint32_t    len;
+        } string_value;             /* CONST_STRING */
+        struct {
+            ArcRegionId try_region;
+            ArcRegionId catch_region;
+        } try_catch;                /* TRY */
+        struct {
+            uint16_t count;         /* element count (ARRAY) or pair count (MAP) */
+        } collection;              /* ARRAY_LITERAL, MAP_LITERAL */
+        struct {
+            uint16_t id;            /* ArcIntrinsicId */
+        } intrinsic;               /* INTRINSIC_CALL */
     } attr;
 } ArcNode;
 

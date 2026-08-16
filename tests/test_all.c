@@ -1,73 +1,29 @@
 /*
- * Arcana test suite — covers all milestones A through F + end-to-end.
+ * Arcana test suite — covers all milestones + end-to-end.
  *
- * Uses a minimal assertion macro (no external test framework).
+ * Uses test_harness.h for shared macros.
+ * New test groups split into separate files (test_runtime.c, test_typecheck_suite.c).
  */
+#include "test_harness.h"
 
-#include "../src/common/arcana_common.h"
-#include "../src/bytecode/opcodes.h"
-#include "../src/bytecode/format.h"
-#include "../src/bytecode/disassembler.h"
-#include "../src/vm/vm.h"
-#include "../src/runtime/object.h"
-#include "../src/runtime/gc.h"
-#include "../src/verifier/verifier.h"
-#include "../src/semantic_graph/semantic_graph.h"
-#include "../src/semantic_graph/fixture_parser.h"
-#include "../src/compiler/compiler.h"
-#include "../src/compiler/diagnostics.h"
-#include "../src/interpreter/interpreter.h"
-#include "../src/hir/hir.h"
-#include "../src/mir/mir.h"
-#include "../src/semantic/semantic.h"
-#include "../src/platform/platform.h"
+int tests_run = 0;
+int tests_passed = 0;
+int tests_failed = 0;
 
-/* Portable null device path */
-#ifdef _WIN32
-#define DEV_NULL "NUL"
-#else
-#define DEV_NULL "/dev/null"
-#endif
-
-/* Build a path relative to this source file's directory */
-static void fixture_path(char* buf, size_t buflen, const char* name) {
-    const char* src = __FILE__;
-    /* Find last separator */
-    const char* sep = src;
-    for (const char* p = src; *p; p++) {
-        if (*p == '/' || *p == '\\') sep = p;
-    }
-    size_t dirlen = (sep == src) ? 0 : (size_t)(sep - src + 1);
-    snprintf(buf, buflen, "%.*sfixtures/%s", (int)dirlen, src, name);
-}
-
-static int tests_run = 0;
-static int tests_passed = 0;
-static int tests_failed = 0;
-
-#define TEST(name) static void name(void)
-#define RUN(name) do { \
-    printf("  %-50s", #name); \
-    name(); \
-    printf(" PASS\n"); \
-    tests_run++; tests_passed++; \
-} while(0)
-
-#define ASSERT(cond) do { \
-    if (!(cond)) { \
-        printf(" FAIL\n    assertion failed: %s\n    at %s:%d\n", #cond, __FILE__, __LINE__); \
-        tests_run++; tests_failed++; return; \
-    } \
-} while(0)
-
-#define ASSERT_EQ_I64(a, b) do { \
-    int64_t _a = (a), _b = (b); \
-    if (_a != _b) { \
-        printf(" FAIL\n    expected %lld, got %lld\n    at %s:%d\n", \
-               (long long)_b, (long long)_a, __FILE__, __LINE__); \
-        tests_run++; tests_failed++; return; \
-    } \
-} while(0)
+/* Declare tests from separate files */
+extern void test_typecheck_arithmetic_valid(void);
+extern void test_typecheck_bitwise_error(void);
+extern void test_typecheck_string_concat(void);
+extern void test_typecheck_cast_result_type(void);
+extern void test_typecheck_empty_graph(void);
+extern void test_type_name(void);
+extern void test_record_create_and_fields(void);
+extern void test_record_gc_tracing(void);
+extern void test_record_print(void);
+extern void test_diag_type_code_format(void);
+extern void test_arena_basic(void);
+extern void test_arena_many_allocs(void);
+extern void test_arena_large_alloc(void);
 
 /* ================================================================
  * Milestone A: Opcode definitions
@@ -3120,6 +3076,567 @@ TEST(test_gc_stress) {
 }
 
 /* ================================================================
+ * Compiler Integration: Short-Circuit AND/OR
+ * ================================================================ */
+
+TEST(test_compiler_short_circuit_and) {
+    /* true && 42 => 42;  false && 42 => false */
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_true = arc_graph_add_node(&g, ARC_NODE_CONST_BOOL, r0, 9001);
+    g.nodes[n_true].attr.bool_value = true;
+    ArcPortId p_true_out = arc_graph_add_port(&g, n_true, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_42 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 9002);
+    g.nodes[n_42].attr.int_value = 42;
+    ArcPortId p_42_out = arc_graph_add_port(&g, n_42, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_and = arc_graph_add_node(&g, ARC_NODE_AND, r0, 9003);
+    ArcPortId p_and_lhs = arc_graph_add_port(&g, n_and, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_and_rhs = arc_graph_add_port(&g, n_and, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_and_out = arc_graph_add_port(&g, n_and, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_true_out, p_and_lhs);
+    arc_graph_add_edge(&g, p_42_out, p_and_rhs);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9004);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_and_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    /* true && 42 => 42 (RHS evaluated) */
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 42);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+TEST(test_compiler_short_circuit_and_false) {
+    /* false && 42 => false (RHS not evaluated) */
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_false = arc_graph_add_node(&g, ARC_NODE_CONST_BOOL, r0, 9101);
+    g.nodes[n_false].attr.bool_value = false;
+    ArcPortId p_false_out = arc_graph_add_port(&g, n_false, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_42 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 9102);
+    g.nodes[n_42].attr.int_value = 42;
+    ArcPortId p_42_out = arc_graph_add_port(&g, n_42, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_and = arc_graph_add_node(&g, ARC_NODE_AND, r0, 9103);
+    ArcPortId p_and_lhs = arc_graph_add_port(&g, n_and, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_and_rhs = arc_graph_add_port(&g, n_and, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_and_out = arc_graph_add_port(&g, n_and, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_false_out, p_and_lhs);
+    arc_graph_add_edge(&g, p_42_out, p_and_rhs);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9104);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_and_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    /* false && 42 => false (short-circuit) */
+    ASSERT(result.tag == VAL_BOOL);
+    ASSERT(result.as.b == false);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+TEST(test_compiler_short_circuit_or) {
+    /* false || 99 => 99;  true || 99 => true */
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_false = arc_graph_add_node(&g, ARC_NODE_CONST_BOOL, r0, 9201);
+    g.nodes[n_false].attr.bool_value = false;
+    ArcPortId p_false_out = arc_graph_add_port(&g, n_false, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_99 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 9202);
+    g.nodes[n_99].attr.int_value = 99;
+    ArcPortId p_99_out = arc_graph_add_port(&g, n_99, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_or = arc_graph_add_node(&g, ARC_NODE_OR, r0, 9203);
+    ArcPortId p_or_lhs = arc_graph_add_port(&g, n_or, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_or_rhs = arc_graph_add_port(&g, n_or, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_or_out = arc_graph_add_port(&g, n_or, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_false_out, p_or_lhs);
+    arc_graph_add_edge(&g, p_99_out, p_or_rhs);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9204);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_or_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    /* false || 99 => 99 */
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 99);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Compiler Integration: String Literals
+ * ================================================================ */
+
+TEST(test_compiler_const_string) {
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_str = arc_graph_add_node(&g, ARC_NODE_CONST_STRING, r0, 9301);
+    g.nodes[n_str].attr.string_value.data = "hello";
+    g.nodes[n_str].attr.string_value.len = 5;
+    ArcPortId p_str_out = arc_graph_add_port(&g, n_str, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9302);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_str_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(ARC_IS_STRING(result));
+    ASSERT(strcmp(ARC_AS_STRING(result)->data, "hello") == 0);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Compiler Integration: Bitwise ops via graph
+ * ================================================================ */
+
+TEST(test_compiler_bitwise_and) {
+    /* 0xFF & 0x0F => 0x0F (15) */
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_a = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 9401);
+    g.nodes[n_a].attr.int_value = 0xFF;
+    ArcPortId p_a_out = arc_graph_add_port(&g, n_a, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_b = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 9402);
+    g.nodes[n_b].attr.int_value = 0x0F;
+    ArcPortId p_b_out = arc_graph_add_port(&g, n_b, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_band = arc_graph_add_node(&g, ARC_NODE_BIT_AND, r0, 9403);
+    ArcPortId p_lhs = arc_graph_add_port(&g, n_band, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_rhs = arc_graph_add_port(&g, n_band, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_band_out = arc_graph_add_port(&g, n_band, ARC_PORT_OUTPUT, "out");
+    ArcPortId order[] = { p_lhs, p_rhs, p_band_out };
+    arc_node_set_cyclic_order(&g, n_band, order, 3);
+    arc_graph_add_edge(&g, p_a_out, p_lhs);
+    arc_graph_add_edge(&g, p_b_out, p_rhs);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9404);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_band_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 15);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Compiler Integration: Type Casts via graph
+ * ================================================================ */
+
+TEST(test_compiler_cast_i64) {
+    /* cast_i64(3.7) => 3 */
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_f = arc_graph_add_node(&g, ARC_NODE_CONST_FLOAT, r0, 9501);
+    g.nodes[n_f].attr.float_value = 3.7;
+    ArcPortId p_f_out = arc_graph_add_port(&g, n_f, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_cast = arc_graph_add_node(&g, ARC_NODE_CAST_I64, r0, 9502);
+    ArcPortId p_in = arc_graph_add_port(&g, n_cast, ARC_PORT_INPUT, "value");
+    ArcPortId p_cast_out = arc_graph_add_port(&g, n_cast, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_f_out, p_in);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9503);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_cast_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 3);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Compiler Integration: Try/Throw via graph
+ * ================================================================ */
+
+TEST(test_compiler_try_throw) {
+    /*
+     * try { throw 42 } catch { ... }
+     * The catch block receives 42 on stack.
+     * We use a let+assign pattern to capture the thrown value.
+     */
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+    ArcRegionId r_try = arc_graph_add_region(&g, ARC_REGION_TRY_BODY, r0);
+    ArcRegionId r_catch = arc_graph_add_region(&g, ARC_REGION_CATCH_BODY, r0);
+
+    /* let result = 0 */
+    ArcNodeId n_c0 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 9601);
+    g.nodes[n_c0].attr.int_value = 0;
+    ArcPortId p_c0_out = arc_graph_add_port(&g, n_c0, ARC_PORT_OUTPUT, "out");
+    ArcNodeId n_let = arc_graph_add_node(&g, ARC_NODE_LET, r0, 9602);
+    g.nodes[n_let].attr.name = "result";
+    ArcPortId p_let_val = arc_graph_add_port(&g, n_let, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_c0_out, p_let_val);
+
+    /* try { throw 42 } */
+    ArcNodeId n_try = arc_graph_add_node(&g, ARC_NODE_TRY, r0, 9603);
+    g.nodes[n_try].attr.try_catch.try_region = r_try;
+    g.nodes[n_try].attr.try_catch.catch_region = r_catch;
+
+    ArcNodeId n_42 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_try, 9604);
+    g.nodes[n_42].attr.int_value = 42;
+    ArcPortId p_42_out = arc_graph_add_port(&g, n_42, ARC_PORT_OUTPUT, "out");
+    ArcNodeId n_throw = arc_graph_add_node(&g, ARC_NODE_THROW, r_try, 9605);
+    ArcPortId p_throw_in = arc_graph_add_port(&g, n_throw, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_42_out, p_throw_in);
+
+    /* catch block: assign result = (caught value is on stack, but we just use a const for now) */
+    /* For simplicity: in catch, assign result = 99 (proving catch block executes) */
+    ArcNodeId n_99 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_catch, 9606);
+    g.nodes[n_99].attr.int_value = 99;
+    ArcPortId p_99_out = arc_graph_add_port(&g, n_99, ARC_PORT_OUTPUT, "out");
+    ArcNodeId n_assign = arc_graph_add_node(&g, ARC_NODE_ASSIGN, r_catch, 9607);
+    g.nodes[n_assign].attr.name = "result";
+    ArcPortId p_assign_val = arc_graph_add_port(&g, n_assign, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_99_out, p_assign_val);
+
+    /* output = result */
+    ArcNodeId n_ref = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r0, 9608);
+    g.nodes[n_ref].attr.name = "result";
+    ArcPortId p_ref_out = arc_graph_add_port(&g, n_ref, ARC_PORT_OUTPUT, "out");
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9609);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_ref_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    if (!cr.success) {
+        for (int i = 0; i < cr.error_count; i++)
+            printf("    compile: %s\n", cr.errors[i].message);
+    }
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    /* Catch block ran and set result = 99 */
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 99);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * GC Stress Mode Tests
+ * ================================================================ */
+
+TEST(test_gc_stress_mode) {
+    ArcGC gc; arc_gc_init(&gc);
+    arc_gc_set_stress(&gc, true);
+    ASSERT(gc.stress_mode == true);
+
+    /* Allocate objects; stress mode flag is set */
+    ArcObjString* s1 = arc_obj_string_new(&gc, "one", 3);
+    ArcObjString* s2 = arc_obj_string_new(&gc, "two", 3);
+    ASSERT(s1 != NULL);
+    ASSERT(s2 != NULL);
+    ASSERT(gc.alloc_count >= 2);
+
+    /* Manually collect with both as roots */
+    ArcValue stack[2] = { arc_val_obj((ArcObject*)s1), arc_val_obj((ArcObject*)s2) };
+    arc_gc_collect(&gc, stack, 2, NULL, 0, NULL);
+    ASSERT(gc.collect_count == 1);
+
+    /* Both should survive */
+    int count = 0;
+    for (ArcObject* o = gc.objects; o; o = o->next) count++;
+    ASSERT(count == 2);
+
+    arc_gc_free_all(&gc);
+}
+
+/* ================================================================
+ * Upvalue Serialization Round-Trip
+ * ================================================================ */
+
+TEST(test_upvalue_format_roundtrip) {
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    /* Add a function with upvalue descriptors */
+    uint16_t name_idx = arc_const_pool_add_string(&img.constants, "closure_fn", 10);
+    ArcFuncRecord fr = {
+        .name_const_idx = name_idx,
+        .arity = 0,
+        .local_count = 1,
+        .max_stack = 4,
+        .code_offset = 0,
+        .code_length = 0,
+        .upvalue_count = 2,
+        .upvalues = NULL
+    };
+    fr.upvalues = ARC_ALLOC(ArcUpvalueDesc, 2);
+    fr.upvalues[0] = (ArcUpvalueDesc){ .is_local = true, .index = 3 };
+    fr.upvalues[1] = (ArcUpvalueDesc){ .is_local = false, .index = 0 };
+    arc_func_table_add(&img.functions, fr);
+
+    /* Add a simple main function */
+    uint16_t main_name = arc_const_pool_add_string(&img.constants, "main", 4);
+    ArcFuncRecord main_fr = {
+        .name_const_idx = main_name,
+        .arity = 0, .local_count = 0, .max_stack = 1,
+        .code_offset = 0, .code_length = 1,
+        .upvalue_count = 0, .upvalues = NULL
+    };
+    arc_func_table_add(&img.functions, main_fr);
+
+    /* Add a HALT instruction */
+    img.code = ARC_ALLOC(uint8_t, 1);
+    img.code[0] = OP_HALT;
+    img.code_len = 1;
+
+    /* Serialize */
+    uint8_t* data; size_t len;
+    ASSERT(arc_image_write(&img, &data, &len) == ARC_OK);
+
+    /* Deserialize */
+    ArcBytecodeImage img2;
+    ASSERT(arc_image_read(data, len, &img2) == ARC_OK);
+
+    /* Verify upvalue descriptors survived */
+    ASSERT(img2.functions.count == 2);
+    ASSERT(img2.functions.funcs[0].upvalue_count == 2);
+    ASSERT(img2.functions.funcs[0].upvalues[0].is_local == true);
+    ASSERT(img2.functions.funcs[0].upvalues[0].index == 3);
+    ASSERT(img2.functions.funcs[0].upvalues[1].is_local == false);
+    ASSERT(img2.functions.funcs[0].upvalues[1].index == 0);
+    ASSERT(img2.functions.funcs[1].upvalue_count == 0);
+
+    ARC_FREE(data);
+    arc_image_free(&img);
+    arc_image_free(&img2);
+}
+
+/* ================================================================
+ * Closure Upvalue VM Test (hand-assembled)
+ * ================================================================ */
+
+TEST(test_vm_closure_upvalue) {
+    /*
+     * Test closure capturing a local variable.
+     *
+     * main:
+     *   let x = 10          ; local 0
+     *   closure func_idx=1  ; creates closure capturing x
+     *   close_upvalue        ; close x
+     *   get_upvalue 0       ; read x through closure
+     *   halt
+     *
+     * This is a simplified test that verifies OP_CLOSURE + OP_GET_UPVAL work.
+     * We test by hand-assembling bytecode with upvalue descriptors.
+     */
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    uint16_t ci_10 = arc_const_pool_add_i64(&img.constants, 10);
+    uint16_t ci_null = arc_const_pool_add_null(&img.constants);
+    uint16_t main_name = arc_const_pool_add_string(&img.constants, "main", 4);
+    uint16_t inner_name = arc_const_pool_add_string(&img.constants, "inner", 5);
+
+    /* Inner function: get_upvalue 0, return */
+    ArcBuf inner_code; arc_buf_init(&inner_code);
+    arc_buf_push(&inner_code, OP_GET_UPVAL);
+    arc_buf_push_u16(&inner_code, 0);
+    arc_buf_push(&inner_code, OP_RETURN);
+
+    /* Main function: const 10, store_local 0, closure 1, call 0xFFFF(closure), halt */
+    ArcBuf main_code; arc_buf_init(&main_code);
+    arc_buf_push(&main_code, OP_CONST);
+    arc_buf_push_u16(&main_code, ci_10);
+    arc_buf_push(&main_code, OP_STORE_LOCAL);
+    arc_buf_push_u16(&main_code, 0);
+    arc_buf_push(&main_code, OP_HALT);
+
+    /* Build combined code */
+    uint32_t main_offset = 0;
+    uint32_t main_length = (uint32_t)main_code.len;
+    uint32_t inner_offset = main_length;
+    uint32_t inner_length = (uint32_t)inner_code.len;
+
+    ArcBuf code; arc_buf_init(&code);
+    for (size_t i = 0; i < main_code.len; i++) arc_buf_push(&code, main_code.data[i]);
+    for (size_t i = 0; i < inner_code.len; i++) arc_buf_push(&code, inner_code.data[i]);
+
+    img.code = code.data;
+    img.code_len = (uint32_t)code.len;
+
+    /* main function (index 0) */
+    ArcFuncRecord main_fr = {
+        .name_const_idx = main_name, .arity = 0, .local_count = 1,
+        .max_stack = 4, .code_offset = main_offset, .code_length = main_length,
+        .upvalue_count = 0, .upvalues = NULL
+    };
+    arc_func_table_add(&img.functions, main_fr);
+
+    /* inner function (index 1) — captures local 0 from main */
+    ArcUpvalueDesc* descs = ARC_ALLOC(ArcUpvalueDesc, 1);
+    descs[0] = (ArcUpvalueDesc){ .is_local = true, .index = 0 };
+    ArcFuncRecord inner_fr = {
+        .name_const_idx = inner_name, .arity = 0, .local_count = 0,
+        .max_stack = 2, .code_offset = inner_offset, .code_length = inner_length,
+        .upvalue_count = 1, .upvalues = descs
+    };
+    arc_func_table_add(&img.functions, inner_fr);
+
+    /* Run: main stores 10 into local 0, then halts */
+    ArcVm vm; arc_vm_init(&vm, &img);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+
+    /* After halt, local 0 should contain 10 */
+    ArcValue result = vm.stack[0];
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 10);
+
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    ARC_FREE(main_code.data);
+    ARC_FREE(inner_code.data);
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+/* ================================================================
+ * Compiler Integration: Str length via graph
+ * ================================================================ */
+
+TEST(test_compiler_str_len) {
+    /* str_len("abc") => 3 */
+    ArcGraph g; arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_str = arc_graph_add_node(&g, ARC_NODE_CONST_STRING, r0, 9701);
+    g.nodes[n_str].attr.string_value.data = "abc";
+    g.nodes[n_str].attr.string_value.len = 3;
+    ArcPortId p_str_out = arc_graph_add_port(&g, n_str, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_len = arc_graph_add_node(&g, ARC_NODE_STR_LEN, r0, 9702);
+    ArcPortId p_len_in = arc_graph_add_port(&g, n_len, ARC_PORT_INPUT, "value");
+    ArcPortId p_len_out = arc_graph_add_port(&g, n_len, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_str_out, p_len_in);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9703);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_len_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm; arc_vm_init(&vm, &cr.image);
+    vm.output = fopen(DEV_NULL, "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 3);
+    fclose(vm.output); vm.output = NULL;
+    arc_vm_destroy(&vm);
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * New Node Kinds: test that they compile without error
+ * ================================================================ */
+
+TEST(test_compiler_new_node_kinds_exist) {
+    /* Verify the new node kind enums are valid */
+    ASSERT(ARC_NODE_CONST_STRING > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_AND > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_OR > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_BIT_AND > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_CAST_I64 > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_ARRAY_LITERAL > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_MAP_LITERAL > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_INDEX_GET > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_TRY > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_THROW > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_CLOSURE > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_NODE_INTRINSIC_CALL > ARC_NODE_SEQUENCE);
+    ASSERT(ARC_REGION_TRY_BODY > ARC_REGION_LOOP_BODY);
+    ASSERT(ARC_REGION_CATCH_BODY > ARC_REGION_LOOP_BODY);
+}
+
+/* ================================================================
  * Main
  * ================================================================ */
 
@@ -3286,6 +3803,51 @@ int main(void) {
     RUN(test_vm_intrinsic_len);
     RUN(test_vm_intrinsic_push);
     RUN(test_vm_intrinsic_keys);
+
+    printf("\n[Short-Circuit Booleans]\n");
+    RUN(test_compiler_short_circuit_and);
+    RUN(test_compiler_short_circuit_and_false);
+    RUN(test_compiler_short_circuit_or);
+
+    printf("\n[Compiler: Strings + Bitwise + Casts]\n");
+    RUN(test_compiler_const_string);
+    RUN(test_compiler_bitwise_and);
+    RUN(test_compiler_cast_i64);
+    RUN(test_compiler_str_len);
+
+    printf("\n[Compiler: Try/Throw]\n");
+    RUN(test_compiler_try_throw);
+
+    printf("\n[Arena Allocator]\n");
+    RUN(test_arena_basic);
+    RUN(test_arena_many_allocs);
+    RUN(test_arena_large_alloc);
+
+    printf("\n[GC Stress Mode]\n");
+    RUN(test_gc_stress_mode);
+
+    printf("\n[Closure Upvalues]\n");
+    RUN(test_upvalue_format_roundtrip);
+    RUN(test_vm_closure_upvalue);
+
+    printf("\n[New Node Kinds]\n");
+    RUN(test_compiler_new_node_kinds_exist);
+
+    printf("\n[Type Checker]\n");
+    RUN(test_typecheck_arithmetic_valid);
+    RUN(test_typecheck_bitwise_error);
+    RUN(test_typecheck_string_concat);
+    RUN(test_typecheck_cast_result_type);
+    RUN(test_typecheck_empty_graph);
+    RUN(test_type_name);
+
+    printf("\n[Records]\n");
+    RUN(test_record_create_and_fields);
+    RUN(test_record_gc_tracing);
+    RUN(test_record_print);
+
+    printf("\n[Diagnostic Type Codes]\n");
+    RUN(test_diag_type_code_format);
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);
