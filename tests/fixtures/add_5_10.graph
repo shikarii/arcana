@@ -1,0 +1,8 @@
+; Test fixture: compute 5 + 10
+region r0 module
+node n0 const_int(5) in r0
+node n1 const_int(10) in r0
+node n2 add in r0
+edge e0 n0.out -> n2.lhs
+edge e1 n1.out -> n2.rhs
+root n2.out

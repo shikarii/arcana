@@ -1,0 +1,6 @@
+; Test fixture: not(true) == false
+region r0 module
+node n0 const_bool(true) in r0
+node n1 not in r0
+edge e0 n0.out -> n1.value
+root n1.out

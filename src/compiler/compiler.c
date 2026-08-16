@@ -234,6 +234,16 @@ static void compile_node(Compiler* c, ArcNodeId node_id) {
         break;
     }
 
+    case ARC_NODE_NOT: {
+        ArcPortId in = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
+        if (in == ARC_INVALID_ID) in = find_port_by_role(c->graph, node_id, "in", ARC_PORT_INPUT);
+        ArcNodeId src = find_source_node(c->graph, in);
+        if (src == ARC_INVALID_ID) { cerr(c, "not node %u has no input", node_id); return; }
+        compile_node(c, src);
+        emit_op(c, OP_NOT);
+        break;
+    }
+
     case ARC_NODE_VAR_REF: {
         int slot = find_local(c, n->attr.name);
         if (slot < 0) { cerr(c, "undefined variable '%s'", n->attr.name); return; }

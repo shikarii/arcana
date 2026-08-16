@@ -1,0 +1,2 @@
+; Malformed fixture: references nonexistent region
+node n0 const_int(5) in r_nonexistent

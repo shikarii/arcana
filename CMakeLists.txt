@@ -34,6 +34,7 @@ target_link_libraries(arcana_verifier PUBLIC arcana_bytecode)
 # --- Library: arcana_semantic_graph ---
 add_library(arcana_semantic_graph STATIC
     src/semantic_graph/semantic_graph.c
+    src/semantic_graph/fixture_parser.c
 )
 target_include_directories(arcana_semantic_graph PUBLIC src)
 
@@ -42,6 +43,12 @@ add_library(arcana_compiler STATIC
     src/compiler/compiler.c
 )
 target_link_libraries(arcana_compiler PUBLIC arcana_bytecode arcana_semantic_graph)
+
+# --- Library: arcana_interpreter ---
+add_library(arcana_interpreter STATIC
+    src/interpreter/interpreter.c
+)
+target_link_libraries(arcana_interpreter PUBLIC arcana_semantic_graph)
 
 # --- Test executable ---
 add_executable(arcana_tests
@@ -53,6 +60,7 @@ target_link_libraries(arcana_tests
     arcana_verifier
     arcana_semantic_graph
     arcana_compiler
+    arcana_interpreter
 )
 
 # --- CLI tools ---
@@ -68,6 +76,10 @@ target_link_libraries(arcana-verify arcana_bytecode arcana_verifier)
 # --- Assembler ---
 add_executable(arcana-asm tools/arcana-asm.c)
 target_link_libraries(arcana-asm arcana_bytecode)
+
+# --- Compiler CLI ---
+add_executable(arcana-compile tools/arcana-compile.c)
+target_link_libraries(arcana-compile arcana_semantic_graph arcana_compiler arcana_bytecode arcana_verifier)
 
 enable_testing()
 add_test(NAME arcana_tests COMMAND arcana_tests)
