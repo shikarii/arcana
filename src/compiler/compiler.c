@@ -110,8 +110,34 @@ static ArcPortId find_port_by_role(const ArcGraph* g, ArcNodeId node_id, const c
     return ARC_INVALID_ID;
 }
 
-/* --- Compile a single node expression (recursively follows edges) --- */
+/* --- Expression node check: nodes that should only be compiled on-demand via edges --- */
+static bool is_expr_node(ArcNodeKind k) {
+    switch (k) {
+    case ARC_NODE_CONST_INT: case ARC_NODE_CONST_FLOAT:
+    case ARC_NODE_CONST_BOOL: case ARC_NODE_CONST_NULL:
+    case ARC_NODE_ADD: case ARC_NODE_SUB: case ARC_NODE_MUL:
+    case ARC_NODE_DIV: case ARC_NODE_MOD: case ARC_NODE_NEG:
+    case ARC_NODE_EQ: case ARC_NODE_NEQ: case ARC_NODE_LT:
+    case ARC_NODE_LE: case ARC_NODE_GT: case ARC_NODE_GE:
+    case ARC_NODE_VAR_REF: case ARC_NODE_FUNC_CALL:
+    case ARC_NODE_NOT:
+        return true;
+    default: return false;
+    }
+}
+
+/* Compile only statement nodes from a region (skip expression-only nodes) */
 static void compile_node(Compiler* c, ArcNodeId node_id);
+
+static void compile_region_stmts(Compiler* c, ArcRegionId rid) {
+    if (rid == ARC_INVALID_ID) return;
+    const ArcRegion* r = &c->graph->regions[rid];
+    for (uint32_t i = 0; i < r->member_count; i++) {
+        const ArcNode* m = &c->graph->nodes[r->members[i]];
+        if (m->kind == ARC_NODE_PARAM || is_expr_node(m->kind)) continue;
+        compile_node(c, r->members[i]);
+    }
+}
 
 static void compile_binary(Compiler* c, ArcNodeId node_id, uint8_t op) {
     const ArcNode* n = &c->graph->nodes[node_id];
@@ -266,21 +292,13 @@ static void compile_node(Compiler* c, ArcNodeId node_id) {
 
         uint32_t else_jump = emit_jump(c, OP_JUMP_IF_FALSE);
 
-        /* Compile then region */
-        if (n->attr.branch.then_region != ARC_INVALID_ID) {
-            const ArcRegion* tr = &c->graph->regions[n->attr.branch.then_region];
-            for (uint32_t i = 0; i < tr->member_count; i++)
-                compile_node(c, tr->members[i]);
-        }
+        /* Compile then region (statement nodes only) */
+        compile_region_stmts(c, n->attr.branch.then_region);
         uint32_t end_jump = emit_jump(c, OP_JUMP);
         patch_jump(c, else_jump);
 
-        /* Compile else region */
-        if (n->attr.branch.else_region != ARC_INVALID_ID) {
-            const ArcRegion* er = &c->graph->regions[n->attr.branch.else_region];
-            for (uint32_t i = 0; i < er->member_count; i++)
-                compile_node(c, er->members[i]);
-        }
+        /* Compile else region (statement nodes only) */
+        compile_region_stmts(c, n->attr.branch.else_region);
         patch_jump(c, end_jump);
         break;
     }
@@ -372,11 +390,15 @@ static void compile_function(Compiler* c, ArcNodeId func_node_id) {
     uint16_t name_ci = arc_const_pool_add_string(&c->image.constants,
         fn->attr.func.name, (uint32_t)strlen(fn->attr.func.name));
 
+    /* Register placeholder so recursive calls can resolve this function */
+    uint16_t func_idx = arc_func_table_add(&c->image.functions, (ArcFuncRecord){
+        .name_const_idx = name_ci, .arity = fn->attr.func.arity
+    });
+
     /* Add parameters as locals */
     ArcRegionId body_rid = fn->attr.func.body_region;
     const ArcRegion* body = &c->graph->regions[body_rid];
 
-    /* Find PARAM nodes in the body region */
     for (uint32_t i = 0; i < body->member_count; i++) {
         const ArcNode* member = &c->graph->nodes[body->members[i]];
         if (member->kind == ARC_NODE_PARAM)
@@ -385,12 +407,8 @@ static void compile_function(Compiler* c, ArcNodeId func_node_id) {
 
     uint32_t code_start = (uint32_t)c->code.len;
 
-    /* Compile body statements (non-PARAM members) */
-    for (uint32_t i = 0; i < body->member_count; i++) {
-        const ArcNode* member = &c->graph->nodes[body->members[i]];
-        if (member->kind == ARC_NODE_PARAM) continue;
-        compile_node(c, body->members[i]);
-    }
+    /* Compile body (statement nodes only, expressions pulled in via edges) */
+    compile_region_stmts(c, body_rid);
 
     /* Ensure function ends with a return */
     if (c->code.len == code_start ||
@@ -402,7 +420,8 @@ static void compile_function(Compiler* c, ArcNodeId func_node_id) {
 
     uint32_t code_end = (uint32_t)c->code.len;
 
-    ArcFuncRecord rec = {
+    /* Update placeholder with actual code offsets/metadata */
+    c->image.functions.funcs[func_idx] = (ArcFuncRecord){
         .name_const_idx = name_ci,
         .arity = fn->attr.func.arity,
         .local_count = c->local_count,
@@ -410,7 +429,6 @@ static void compile_function(Compiler* c, ArcNodeId func_node_id) {
         .code_offset = code_start,
         .code_length = code_end - code_start
     };
-    arc_func_table_add(&c->image.functions, rec);
 }
 
 /* --- Main compile entry point --- */
@@ -437,21 +455,9 @@ ArcCompileResult arc_compile(const ArcGraph* graph) {
     const ArcRegion* root = &graph->regions[graph->root_region];
     for (uint32_t i = 0; i < root->member_count; i++) {
         const ArcNode* n = &graph->nodes[root->members[i]];
-        /* Skip function defs (already compiled) and pure expression nodes
-           (they get pulled in via edges from statement/output nodes) */
         if (n->kind == ARC_NODE_FUNC_DEF) continue;
         if (n->kind == ARC_NODE_ROOT_OUTPUT) continue; /* handled below */
-        switch (n->kind) {
-        case ARC_NODE_CONST_INT: case ARC_NODE_CONST_FLOAT:
-        case ARC_NODE_CONST_BOOL: case ARC_NODE_CONST_NULL:
-        case ARC_NODE_ADD: case ARC_NODE_SUB: case ARC_NODE_MUL:
-        case ARC_NODE_DIV: case ARC_NODE_MOD: case ARC_NODE_NEG:
-        case ARC_NODE_EQ: case ARC_NODE_NEQ: case ARC_NODE_LT:
-        case ARC_NODE_LE: case ARC_NODE_GT: case ARC_NODE_GE:
-        case ARC_NODE_VAR_REF:
-            continue; /* pure expressions — compiled on demand */
-        default: break;
-        }
+        if (is_expr_node(n->kind)) continue;
         compile_node(&c, root->members[i]);
     }
 
@@ -459,6 +465,8 @@ ArcCompileResult arc_compile(const ArcGraph* graph) {
     if (graph->output_node != ARC_INVALID_ID &&
         graph->nodes[graph->output_node].kind == ARC_NODE_ROOT_OUTPUT) {
         compile_node(&c, graph->output_node);
+        /* DUP so value remains on stack after print (for arc_vm_result) */
+        emit_op(&c, OP_DUP);
         /* Print result */
         emit_byte(&c, OP_INTRINSIC);
         emit_u16(&c, ARC_INTRINSIC_PRINT);

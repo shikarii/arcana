@@ -622,6 +622,396 @@ TEST(test_e2e_5_plus_10_vm_result) {
 }
 
 /* ================================================================
+ * Milestone G: Function definitions + calls
+ * ================================================================ */
+
+TEST(test_e2e_function_call) {
+    /*
+     * def double(x): return x + x
+     * output = double(7)   => prints 14
+     */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    /* Function body region */
+    ArcRegionId r_body = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+
+    /* === FUNC_DEF "double" in root region === */
+    ArcNodeId n_fdef = arc_graph_add_node(&g, ARC_NODE_FUNC_DEF, r0, 3001);
+    g.nodes[n_fdef].attr.func.name = "double";
+    g.nodes[n_fdef].attr.func.arity = 1;
+    g.nodes[n_fdef].attr.func.body_region = r_body;
+
+    /* === Body: PARAM "x", VAR_REF "x" (×2), ADD, RETURN === */
+    ArcNodeId n_param = arc_graph_add_node(&g, ARC_NODE_PARAM, r_body, 3010);
+    g.nodes[n_param].attr.name = "x";
+
+    ArcNodeId n_ref1 = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 3011);
+    g.nodes[n_ref1].attr.name = "x";
+    ArcPortId p_ref1_out = arc_graph_add_port(&g, n_ref1, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ref2 = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 3012);
+    g.nodes[n_ref2].attr.name = "x";
+    ArcPortId p_ref2_out = arc_graph_add_port(&g, n_ref2, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_add = arc_graph_add_node(&g, ARC_NODE_ADD, r_body, 3013);
+    ArcPortId p_add_lhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_add_rhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_add_out = arc_graph_add_port(&g, n_add, ARC_PORT_OUTPUT, "out");
+    ArcPortId add_order[] = { p_add_lhs, p_add_rhs, p_add_out };
+    arc_node_set_cyclic_order(&g, n_add, add_order, 3);
+
+    ArcNodeId n_ret = arc_graph_add_node(&g, ARC_NODE_RETURN, r_body, 3014);
+    ArcPortId p_ret_val = arc_graph_add_port(&g, n_ret, ARC_PORT_INPUT, "value");
+
+    arc_graph_add_edge(&g, p_ref1_out, p_add_lhs);
+    arc_graph_add_edge(&g, p_ref2_out, p_add_rhs);
+    arc_graph_add_edge(&g, p_add_out, p_ret_val);
+
+    /* === Root: ConstInt(7) → FUNC_CALL "double" → ROOT_OUTPUT === */
+    ArcNodeId n_7 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 3020);
+    g.nodes[n_7].attr.int_value = 7;
+    ArcPortId p_7_out = arc_graph_add_port(&g, n_7, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_call = arc_graph_add_node(&g, ARC_NODE_FUNC_CALL, r0, 3021);
+    g.nodes[n_call].attr.name = "double";
+    ArcPortId p_call_arg = arc_graph_add_port(&g, n_call, ARC_PORT_INPUT, "arg0");
+    ArcPortId p_call_out = arc_graph_add_port(&g, n_call, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 3022);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+
+    arc_graph_add_edge(&g, p_7_out, p_call_arg);
+    arc_graph_add_edge(&g, p_call_out, p_out_in);
+
+    /* Compile + verify + run */
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVerifyResult vr = arc_verify(&cr.image);
+    ASSERT(vr.valid);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w"); /* suppress print output */
+    ArcStatus s = arc_vm_run(&vm);
+    fclose(vm.output);
+    ASSERT(s == ARC_OK);
+
+    /* double(7) = 7+7 = 14 */
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 14);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Milestone H: If/else branching
+ * ================================================================ */
+
+TEST(test_e2e_if_else) {
+    /*
+     * def pick(flag):
+     *     if flag > 0: return 42
+     *     else: return 99
+     * output = pick(1)   => 42
+     */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+    ArcRegionId r_body = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+    ArcRegionId r_then = arc_graph_add_region(&g, ARC_REGION_THEN, r_body);
+    ArcRegionId r_else = arc_graph_add_region(&g, ARC_REGION_ELSE, r_body);
+
+    /* FUNC_DEF "pick" */
+    ArcNodeId n_fdef = arc_graph_add_node(&g, ARC_NODE_FUNC_DEF, r0, 4001);
+    g.nodes[n_fdef].attr.func.name = "pick";
+    g.nodes[n_fdef].attr.func.arity = 1;
+    g.nodes[n_fdef].attr.func.body_region = r_body;
+
+    /* Body: PARAM "flag" */
+    ArcNodeId n_param = arc_graph_add_node(&g, ARC_NODE_PARAM, r_body, 4010);
+    g.nodes[n_param].attr.name = "flag";
+
+    /* Body: VAR_REF "flag", CONST_INT 0, GT → condition */
+    ArcNodeId n_ref = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 4011);
+    g.nodes[n_ref].attr.name = "flag";
+    ArcPortId p_ref_out = arc_graph_add_port(&g, n_ref, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_zero = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_body, 4012);
+    g.nodes[n_zero].attr.int_value = 0;
+    ArcPortId p_zero_out = arc_graph_add_port(&g, n_zero, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_gt = arc_graph_add_node(&g, ARC_NODE_GT, r_body, 4013);
+    ArcPortId p_gt_lhs = arc_graph_add_port(&g, n_gt, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_gt_rhs = arc_graph_add_port(&g, n_gt, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_gt_out = arc_graph_add_port(&g, n_gt, ARC_PORT_OUTPUT, "out");
+    ArcPortId gt_order[] = { p_gt_lhs, p_gt_rhs, p_gt_out };
+    arc_node_set_cyclic_order(&g, n_gt, gt_order, 3);
+
+    arc_graph_add_edge(&g, p_ref_out, p_gt_lhs);
+    arc_graph_add_edge(&g, p_zero_out, p_gt_rhs);
+
+    /* Body: IF node */
+    ArcNodeId n_if = arc_graph_add_node(&g, ARC_NODE_IF, r_body, 4014);
+    ArcPortId p_if_cond = arc_graph_add_port(&g, n_if, ARC_PORT_INPUT, "cond");
+    n_if; /* avoid warning */
+    g.nodes[n_if].attr.branch.then_region = r_then;
+    g.nodes[n_if].attr.branch.else_region = r_else;
+
+    arc_graph_add_edge(&g, p_gt_out, p_if_cond);
+
+    /* Then: CONST_INT 42, RETURN */
+    ArcNodeId n_42 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_then, 4020);
+    g.nodes[n_42].attr.int_value = 42;
+    ArcPortId p_42_out = arc_graph_add_port(&g, n_42, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ret_then = arc_graph_add_node(&g, ARC_NODE_RETURN, r_then, 4021);
+    ArcPortId p_ret_then_val = arc_graph_add_port(&g, n_ret_then, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_42_out, p_ret_then_val);
+
+    /* Else: CONST_INT 99, RETURN */
+    ArcNodeId n_99 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_else, 4030);
+    g.nodes[n_99].attr.int_value = 99;
+    ArcPortId p_99_out = arc_graph_add_port(&g, n_99, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ret_else = arc_graph_add_node(&g, ARC_NODE_RETURN, r_else, 4031);
+    ArcPortId p_ret_else_val = arc_graph_add_port(&g, n_ret_else, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_99_out, p_ret_else_val);
+
+    /* Root: CONST_INT 1 → FUNC_CALL "pick" → ROOT_OUTPUT */
+    ArcNodeId n_1 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 4040);
+    g.nodes[n_1].attr.int_value = 1;
+    ArcPortId p_1_out = arc_graph_add_port(&g, n_1, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_call = arc_graph_add_node(&g, ARC_NODE_FUNC_CALL, r0, 4041);
+    g.nodes[n_call].attr.name = "pick";
+    ArcPortId p_call_arg = arc_graph_add_port(&g, n_call, ARC_PORT_INPUT, "arg0");
+    ArcPortId p_call_out = arc_graph_add_port(&g, n_call, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_1_out, p_call_arg);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 4042);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_call_out, p_out_in);
+
+    /* Compile + verify + run */
+    ArcCompileResult cr = arc_compile(&g);
+    if (!cr.success) {
+        for (int i = 0; i < cr.error_count; i++)
+            printf("    compile: %s\n", cr.errors[i].message);
+    }
+    ASSERT(cr.success);
+    ArcVerifyResult vr = arc_verify(&cr.image);
+    ASSERT(vr.valid);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ArcStatus s = arc_vm_run(&vm);
+    fclose(vm.output);
+    ASSERT(s == ARC_OK);
+
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 42);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Milestone I: Recursion — fib(10) == 55
+ * ================================================================ */
+
+TEST(test_e2e_fibonacci) {
+    /*
+     * def fib(n):
+     *     if n <= 1: return n
+     *     else: return fib(n-1) + fib(n-2)
+     * output = fib(10)   => 55
+     */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+    ArcRegionId r_body = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+    ArcRegionId r_then = arc_graph_add_region(&g, ARC_REGION_THEN, r_body);
+    ArcRegionId r_else = arc_graph_add_region(&g, ARC_REGION_ELSE, r_body);
+
+    /* FUNC_DEF "fib" */
+    ArcNodeId n_fdef = arc_graph_add_node(&g, ARC_NODE_FUNC_DEF, r0, 5001);
+    g.nodes[n_fdef].attr.func.name = "fib";
+    g.nodes[n_fdef].attr.func.arity = 1;
+    g.nodes[n_fdef].attr.func.body_region = r_body;
+
+    /* Body: PARAM "n" */
+    ArcNodeId n_param = arc_graph_add_node(&g, ARC_NODE_PARAM, r_body, 5010);
+    g.nodes[n_param].attr.name = "n";
+
+    /* Body: VAR_REF "n" for comparison, CONST_INT 1, LE */
+    ArcNodeId n_ref_cmp = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 5011);
+    g.nodes[n_ref_cmp].attr.name = "n";
+    ArcPortId p_ref_cmp_out = arc_graph_add_port(&g, n_ref_cmp, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_1_cmp = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_body, 5012);
+    g.nodes[n_1_cmp].attr.int_value = 1;
+    ArcPortId p_1_cmp_out = arc_graph_add_port(&g, n_1_cmp, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_le = arc_graph_add_node(&g, ARC_NODE_LE, r_body, 5013);
+    ArcPortId p_le_lhs = arc_graph_add_port(&g, n_le, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_le_rhs = arc_graph_add_port(&g, n_le, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_le_out = arc_graph_add_port(&g, n_le, ARC_PORT_OUTPUT, "out");
+    ArcPortId le_order[] = { p_le_lhs, p_le_rhs, p_le_out };
+    arc_node_set_cyclic_order(&g, n_le, le_order, 3);
+
+    arc_graph_add_edge(&g, p_ref_cmp_out, p_le_lhs);
+    arc_graph_add_edge(&g, p_1_cmp_out, p_le_rhs);
+
+    /* Body: IF node */
+    ArcNodeId n_if = arc_graph_add_node(&g, ARC_NODE_IF, r_body, 5014);
+    ArcPortId p_if_cond = arc_graph_add_port(&g, n_if, ARC_PORT_INPUT, "cond");
+    g.nodes[n_if].attr.branch.then_region = r_then;
+    g.nodes[n_if].attr.branch.else_region = r_else;
+    arc_graph_add_edge(&g, p_le_out, p_if_cond);
+
+    /* Then: return n */
+    ArcNodeId n_ref_ret = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_then, 5020);
+    g.nodes[n_ref_ret].attr.name = "n";
+    ArcPortId p_ref_ret_out = arc_graph_add_port(&g, n_ref_ret, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ret_then = arc_graph_add_node(&g, ARC_NODE_RETURN, r_then, 5021);
+    ArcPortId p_ret_then_val = arc_graph_add_port(&g, n_ret_then, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_ref_ret_out, p_ret_then_val);
+
+    /* Else: return fib(n-1) + fib(n-2) */
+
+    /* n-1: VAR_REF "n", CONST_INT 1, SUB */
+    ArcNodeId n_ref_a = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_else, 5030);
+    g.nodes[n_ref_a].attr.name = "n";
+    ArcPortId p_ref_a_out = arc_graph_add_port(&g, n_ref_a, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_1a = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_else, 5031);
+    g.nodes[n_1a].attr.int_value = 1;
+    ArcPortId p_1a_out = arc_graph_add_port(&g, n_1a, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_sub1 = arc_graph_add_node(&g, ARC_NODE_SUB, r_else, 5032);
+    ArcPortId p_sub1_lhs = arc_graph_add_port(&g, n_sub1, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_sub1_rhs = arc_graph_add_port(&g, n_sub1, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_sub1_out = arc_graph_add_port(&g, n_sub1, ARC_PORT_OUTPUT, "out");
+    ArcPortId sub1_order[] = { p_sub1_lhs, p_sub1_rhs, p_sub1_out };
+    arc_node_set_cyclic_order(&g, n_sub1, sub1_order, 3);
+
+    arc_graph_add_edge(&g, p_ref_a_out, p_sub1_lhs);
+    arc_graph_add_edge(&g, p_1a_out, p_sub1_rhs);
+
+    /* fib(n-1) */
+    ArcNodeId n_call1 = arc_graph_add_node(&g, ARC_NODE_FUNC_CALL, r_else, 5033);
+    g.nodes[n_call1].attr.name = "fib";
+    ArcPortId p_call1_arg = arc_graph_add_port(&g, n_call1, ARC_PORT_INPUT, "arg0");
+    ArcPortId p_call1_out = arc_graph_add_port(&g, n_call1, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_sub1_out, p_call1_arg);
+
+    /* n-2: VAR_REF "n", CONST_INT 2, SUB */
+    ArcNodeId n_ref_b = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_else, 5034);
+    g.nodes[n_ref_b].attr.name = "n";
+    ArcPortId p_ref_b_out = arc_graph_add_port(&g, n_ref_b, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_2 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_else, 5035);
+    g.nodes[n_2].attr.int_value = 2;
+    ArcPortId p_2_out = arc_graph_add_port(&g, n_2, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_sub2 = arc_graph_add_node(&g, ARC_NODE_SUB, r_else, 5036);
+    ArcPortId p_sub2_lhs = arc_graph_add_port(&g, n_sub2, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_sub2_rhs = arc_graph_add_port(&g, n_sub2, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_sub2_out = arc_graph_add_port(&g, n_sub2, ARC_PORT_OUTPUT, "out");
+    ArcPortId sub2_order[] = { p_sub2_lhs, p_sub2_rhs, p_sub2_out };
+    arc_node_set_cyclic_order(&g, n_sub2, sub2_order, 3);
+
+    arc_graph_add_edge(&g, p_ref_b_out, p_sub2_lhs);
+    arc_graph_add_edge(&g, p_2_out, p_sub2_rhs);
+
+    /* fib(n-2) */
+    ArcNodeId n_call2 = arc_graph_add_node(&g, ARC_NODE_FUNC_CALL, r_else, 5037);
+    g.nodes[n_call2].attr.name = "fib";
+    ArcPortId p_call2_arg = arc_graph_add_port(&g, n_call2, ARC_PORT_INPUT, "arg0");
+    ArcPortId p_call2_out = arc_graph_add_port(&g, n_call2, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_sub2_out, p_call2_arg);
+
+    /* fib(n-1) + fib(n-2) */
+    ArcNodeId n_add = arc_graph_add_node(&g, ARC_NODE_ADD, r_else, 5038);
+    ArcPortId p_add_lhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_add_rhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_add_out = arc_graph_add_port(&g, n_add, ARC_PORT_OUTPUT, "out");
+    ArcPortId add_order[] = { p_add_lhs, p_add_rhs, p_add_out };
+    arc_node_set_cyclic_order(&g, n_add, add_order, 3);
+
+    arc_graph_add_edge(&g, p_call1_out, p_add_lhs);
+    arc_graph_add_edge(&g, p_call2_out, p_add_rhs);
+
+    /* return fib(n-1) + fib(n-2) */
+    ArcNodeId n_ret_else = arc_graph_add_node(&g, ARC_NODE_RETURN, r_else, 5039);
+    ArcPortId p_ret_else_val = arc_graph_add_port(&g, n_ret_else, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_add_out, p_ret_else_val);
+
+    /* Root: CONST_INT 10 → FUNC_CALL "fib" → ROOT_OUTPUT */
+    ArcNodeId n_10 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 5050);
+    g.nodes[n_10].attr.int_value = 10;
+    ArcPortId p_10_out = arc_graph_add_port(&g, n_10, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_call_main = arc_graph_add_node(&g, ARC_NODE_FUNC_CALL, r0, 5051);
+    g.nodes[n_call_main].attr.name = "fib";
+    ArcPortId p_call_main_arg = arc_graph_add_port(&g, n_call_main, ARC_PORT_INPUT, "arg0");
+    ArcPortId p_call_main_out = arc_graph_add_port(&g, n_call_main, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_10_out, p_call_main_arg);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 5052);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_call_main_out, p_out_in);
+
+    /* Compile */
+    ArcCompileResult cr = arc_compile(&g);
+    if (!cr.success) {
+        for (int i = 0; i < cr.error_count; i++)
+            printf("    compile: %s\n", cr.errors[i].message);
+    }
+    ASSERT(cr.success);
+
+    /* Verify */
+    ArcVerifyResult vr = arc_verify(&cr.image);
+    if (!vr.valid) {
+        for (int i = 0; i < vr.error_count; i++)
+            printf("    verify: %s\n", vr.errors[i].message);
+    }
+    ASSERT(vr.valid);
+
+    /* Execute */
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ArcStatus s = arc_vm_run(&vm);
+    fclose(vm.output);
+    ASSERT(s == ARC_OK);
+
+    /* fib(10) = 55 */
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 55);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
  * Main
  * ================================================================ */
 
@@ -655,6 +1045,15 @@ int main(void) {
     printf("\n[Milestone E-F: End-to-End]\n");
     RUN(test_e2e_5_plus_10);
     RUN(test_e2e_5_plus_10_vm_result);
+
+    printf("\n[Milestone G: Functions]\n");
+    RUN(test_e2e_function_call);
+
+    printf("\n[Milestone H: If/Else]\n");
+    RUN(test_e2e_if_else);
+
+    printf("\n[Milestone I: Recursion]\n");
+    RUN(test_e2e_fibonacci);
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);
