@@ -159,6 +159,7 @@ TEST(test_image_serialize_roundtrip) {
     ARC_FREE(bytes);
     arc_image_free(&img2);
     /* Don't free img — code is owned by the buf */
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -191,6 +192,7 @@ TEST(test_verifier_valid) {
     ASSERT(vr.valid);
     ASSERT(vr.error_count == 0);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -214,6 +216,7 @@ TEST(test_verifier_invalid_const_index) {
     ASSERT(!vr.valid);
     ASSERT(vr.error_count > 0);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -236,6 +239,7 @@ TEST(test_verifier_stack_underflow) {
     ArcVerifyResult vr = arc_verify(&img);
     ASSERT(!vr.valid);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -273,6 +277,7 @@ TEST(test_vm_add_5_10) {
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 15);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -309,6 +314,7 @@ TEST(test_vm_arithmetic) {
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 43);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -341,6 +347,7 @@ TEST(test_vm_comparisons) {
     ASSERT(r.tag == VAL_BOOL);
     ASSERT(r.as.b == true);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -384,6 +391,7 @@ TEST(test_vm_branch) {
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -419,6 +427,7 @@ TEST(test_vm_locals) {
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 15);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -447,6 +456,7 @@ TEST(test_vm_division_by_zero) {
     ArcStatus s = arc_vm_run(&vm);
     ASSERT(s == ARC_ERR_RUNTIME);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -1245,6 +1255,7 @@ TEST(test_vm_stack_overflow) {
     ASSERT(s == ARC_ERR_RUNTIME);
     ASSERT(strstr(vm.error.message, "stack overflow") != NULL);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -1276,6 +1287,7 @@ TEST(test_clock_intrinsic) {
     ASSERT(result.tag == VAL_F64);
     ASSERT(result.as.f64 >= 0.0);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -1313,6 +1325,7 @@ TEST(test_serialization_roundtrip_with_debug) {
 
     ARC_FREE(bytes);
     arc_image_free(&img2);
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -1336,6 +1349,7 @@ TEST(test_verifier_bad_jump_target) {
     ArcVerifyResult vr = arc_verify(&img);
     ASSERT(!vr.valid);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -1640,6 +1654,7 @@ TEST(test_vm_globals) {
     ASSERT(arc_vm_result(&vm).tag == VAL_I64);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -1704,6 +1719,7 @@ TEST(test_vm_string_const) {
     ASSERT(strcmp(result.as.str->data, "hello") == 0);
 
     arc_string_release(result.as.str);
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -1788,6 +1804,7 @@ TEST(test_property_roundtrip_random) {
 
     ARC_FREE(bytes);
     arc_image_free(&img2);
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
@@ -2024,6 +2041,7 @@ TEST(test_verifier_stack_consistency) {
     ArcVerifyResult vr = arc_verify(&img);
     ASSERT(vr.valid);
 
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
