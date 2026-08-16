@@ -25,13 +25,28 @@
     /* --- Globals --- */ \
     X(OP_LOAD_GLOBAL,   0x12, 2, 0, 1, "load_global")   /* u16 idx */ \
     X(OP_STORE_GLOBAL,  0x13, 2, 1, 0, "store_global")  /* u16 idx */ \
-    /* --- Integer arithmetic --- */ \
+    /* --- Type conversion --- */ \
+    X(OP_CAST_I64,      0x14, 0, 1, 1, "cast_i64")      /* any → i64 */ \
+    X(OP_CAST_F64,      0x15, 0, 1, 1, "cast_f64")      /* any → f64 */ \
+    X(OP_CAST_STR,      0x16, 0, 1, 1, "cast_str")      /* any → string */ \
+    /* --- Arithmetic --- */ \
     X(OP_ADD,           0x20, 0, 2, 1, "add")           \
     X(OP_SUB,           0x21, 0, 2, 1, "sub")           \
     X(OP_MUL,           0x22, 0, 2, 1, "mul")           \
     X(OP_DIV,           0x23, 0, 2, 1, "div")           \
     X(OP_MOD,           0x24, 0, 2, 1, "mod")           \
     X(OP_NEG,           0x25, 0, 1, 1, "neg")           \
+    /* --- String ops --- */ \
+    X(OP_STR_LEN,       0x26, 0, 1, 1, "str_len")       /* [str] → [i64] */ \
+    X(OP_STR_SLICE,     0x27, 0, 3, 1, "str_slice")     /* [str, start, end] → [str] */ \
+    X(OP_STR_INDEX,     0x28, 0, 2, 1, "str_index")     /* [str, idx] → [str(1char)] */ \
+    /* --- Bitwise --- */ \
+    X(OP_BIT_AND,       0x29, 0, 2, 1, "bit_and")       /* [a, b] → [a & b] (i64) */ \
+    X(OP_BIT_OR,        0x2A, 0, 2, 1, "bit_or")        \
+    X(OP_BIT_XOR,       0x2B, 0, 2, 1, "bit_xor")       \
+    X(OP_BIT_NOT,       0x2C, 0, 1, 1, "bit_not")       /* [a] → [~a] */ \
+    X(OP_SHL,           0x2D, 0, 2, 1, "shl")           \
+    X(OP_SHR,           0x2E, 0, 2, 1, "shr")           \
     /* --- Comparison --- */ \
     X(OP_EQ,            0x30, 0, 2, 1, "eq")            \
     X(OP_NEQ,           0x31, 0, 2, 1, "neq")           \
@@ -45,9 +60,24 @@
     X(OP_JUMP,          0x40, 4, 0, 0, "jump")          /* i32 offset */ \
     X(OP_JUMP_IF_FALSE, 0x41, 4, 1, 0, "jump_if_false") /* i32 offset */ \
     X(OP_JUMP_IF_TRUE,  0x42, 4, 1, 0, "jump_if_true")  /* i32 offset */ \
+    /* --- Exception handling --- */ \
+    X(OP_TRY_BEGIN,     0x43, 4, 0, 0, "try_begin")     /* i32 catch_offset */ \
+    X(OP_TRY_END,       0x44, 0, 0, 0, "try_end")       \
+    X(OP_THROW,         0x45, 0, 1, 0, "throw")         \
     /* --- Functions --- */ \
     X(OP_CALL,          0x50, 4, -1, 1, "call")         /* u16 func_idx, u8 argc */ \
     X(OP_RETURN,        0x51, 0, 1, 0, "return")        \
+    /* --- Closures --- */ \
+    X(OP_CLOSURE,       0x52, 2, 0, 1, "closure")       /* u16 func_idx */ \
+    X(OP_GET_UPVAL,     0x53, 2, 0, 1, "get_upvalue")   /* u16 upval_idx */ \
+    X(OP_SET_UPVAL,     0x54, 2, 1, 0, "set_upvalue")   /* u16 upval_idx */ \
+    X(OP_CLOSE_UPVAL,   0x55, 0, 0, 0, "close_upvalue") \
+    /* --- Collections --- */ \
+    X(OP_ARRAY_NEW,     0x60, 2, -1, 1, "array_new")    /* u16 count */ \
+    X(OP_INDEX_GET,     0x61, 0, 2, 1, "index_get")     /* [container, key] → [value] */ \
+    X(OP_INDEX_SET,     0x62, 0, 3, 0, "index_set")     /* [container, key, value] → [] */ \
+    X(OP_LENGTH,        0x63, 0, 1, 1, "length")        /* [container] → [i64] */ \
+    X(OP_MAP_NEW,       0x64, 2, -1, 1, "map_new")      /* u16 pair_count */ \
     /* --- Intrinsics --- */ \
     X(OP_INTRINSIC,     0xF0, 4, -1, 0, "intrinsic")    /* u16 intrinsic_id, u8 argc */ \
     /* --- Control --- */ \
@@ -106,8 +136,15 @@ static inline int arc_op_pushes(uint8_t op) {
 
 /* Well-known intrinsic IDs */
 typedef enum {
-    ARC_INTRINSIC_PRINT = 0,
-    ARC_INTRINSIC_CLOCK = 1,
+    ARC_INTRINSIC_PRINT    = 0,
+    ARC_INTRINSIC_CLOCK    = 1,
+    ARC_INTRINSIC_TYPE     = 2,
+    ARC_INTRINSIC_ASSERT   = 3,
+    ARC_INTRINSIC_TOSTRING = 4,
+    ARC_INTRINSIC_INPUT    = 5,
+    ARC_INTRINSIC_LEN      = 6,
+    ARC_INTRINSIC_PUSH     = 7,
+    ARC_INTRINSIC_KEYS     = 8,
     ARC_INTRINSIC_COUNT
 } ArcIntrinsicId;
 

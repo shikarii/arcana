@@ -4,10 +4,12 @@
 #include "value.h"
 #include "../bytecode/format.h"
 #include "../bytecode/opcodes.h"
+#include "../runtime/gc.h"
 
 #define ARC_STACK_MAX   1024
 #define ARC_FRAMES_MAX  256
 #define ARC_GLOBALS_MAX 256
+#define ARC_HANDLER_MAX 64
 
 /* Call frame */
 typedef struct {
@@ -15,6 +17,13 @@ typedef struct {
     uint32_t return_ip;
     uint32_t base_slot;     /* operand stack base for this frame's locals */
 } ArcFrame;
+
+/* Exception handler */
+typedef struct {
+    uint32_t catch_ip;      /* IP of catch block */
+    uint32_t stack_height;  /* sp to restore on throw */
+    uint32_t frame_depth;   /* fp to restore on throw */
+} ArcHandler;
 
 /* VM runtime error */
 typedef struct {
@@ -46,6 +55,16 @@ typedef struct {
     bool      halted;
     ArcVmError error;
 
+    /* Exception handler stack */
+    ArcHandler handlers[ARC_HANDLER_MAX];
+    uint32_t   handler_count;
+
+    /* Garbage collector */
+    ArcGC     gc;
+
+    /* Open upvalue chain (for closures) */
+    ArcObjUpvalue* open_upvalues;
+
     /* Output capture for testing (NULL = stdout) */
     FILE*     output;
 
@@ -61,5 +80,8 @@ ArcStatus arc_vm_run(ArcVm* vm);
 
 /* Get the top-of-stack value after execution */
 ArcValue arc_vm_result(const ArcVm* vm);
+
+/* Clean up VM resources (frees all GC objects) */
+void arc_vm_destroy(ArcVm* vm);
 
 #endif /* ARCANA_VM_H */

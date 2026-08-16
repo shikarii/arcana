@@ -9,6 +9,8 @@
 #include "../src/bytecode/format.h"
 #include "../src/bytecode/disassembler.h"
 #include "../src/vm/vm.h"
+#include "../src/runtime/object.h"
+#include "../src/runtime/gc.h"
 #include "../src/verifier/verifier.h"
 #include "../src/semantic_graph/semantic_graph.h"
 #include "../src/semantic_graph/fixture_parser.h"
@@ -26,6 +28,18 @@
 #else
 #define DEV_NULL "/dev/null"
 #endif
+
+/* Build a path relative to this source file's directory */
+static void fixture_path(char* buf, size_t buflen, const char* name) {
+    const char* src = __FILE__;
+    /* Find last separator */
+    const char* sep = src;
+    for (const char* p = src; *p; p++) {
+        if (*p == '/' || *p == '\\') sep = p;
+    }
+    size_t dirlen = (sep == src) ? 0 : (size_t)(sep - src + 1);
+    snprintf(buf, buflen, "%.*sfixtures/%s", (int)dirlen, src, name);
+}
 
 static int tests_run = 0;
 static int tests_passed = 0;
@@ -277,6 +291,7 @@ TEST(test_vm_add_5_10) {
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 15);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -314,6 +329,7 @@ TEST(test_vm_arithmetic) {
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 43);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -347,6 +363,7 @@ TEST(test_vm_comparisons) {
     ASSERT(r.tag == VAL_BOOL);
     ASSERT(r.as.b == true);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -391,6 +408,7 @@ TEST(test_vm_branch) {
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -427,6 +445,7 @@ TEST(test_vm_locals) {
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 15);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -456,6 +475,7 @@ TEST(test_vm_division_by_zero) {
     ArcStatus s = arc_vm_run(&vm);
     ASSERT(s == ARC_ERR_RUNTIME);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -602,6 +622,7 @@ TEST(test_e2e_5_plus_10) {
     /* Actually, the main function halts after intrinsic print. Let's check stdout. */
     /* For a proper test, redirect output and verify. For now, just check no errors. */
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
@@ -730,6 +751,7 @@ TEST(test_e2e_function_call) {
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 14);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
@@ -846,6 +868,7 @@ TEST(test_e2e_if_else) {
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 42);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
@@ -1030,6 +1053,7 @@ TEST(test_e2e_fibonacci) {
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 55);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
@@ -1208,6 +1232,7 @@ TEST(test_e2e_while_loop) {
     /* Verify debug table has entries */
     ASSERT(cr.image.debug.count > 0);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
@@ -1255,6 +1280,7 @@ TEST(test_vm_stack_overflow) {
     ASSERT(s == ARC_ERR_RUNTIME);
     ASSERT(strstr(vm.error.message, "stack overflow") != NULL);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -1287,6 +1313,7 @@ TEST(test_clock_intrinsic) {
     ASSERT(result.tag == VAL_F64);
     ASSERT(result.as.f64 >= 0.0);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -1412,12 +1439,14 @@ TEST(test_fixture_parse_add) {
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 15);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&fr.graph);
 }
 
 TEST(test_fixture_parse_file) {
-    ArcFixtureResult fr = arc_fixture_parse_file("../tests/fixtures/add_5_10.graph");
+    char path[512]; fixture_path(path, sizeof(path), "add_5_10.graph");
+    ArcFixtureResult fr = arc_fixture_parse_file(path);
     if (!fr.success) printf("    fixture error: %s\n", fr.error);
     ASSERT(fr.success);
     ASSERT(fr.graph.node_count >= 3);
@@ -1432,12 +1461,14 @@ TEST(test_fixture_parse_file) {
     fclose(vm.output);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 15);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&fr.graph);
 }
 
 TEST(test_fixture_parse_malformed) {
-    ArcFixtureResult fr = arc_fixture_parse_file("../tests/fixtures/malformed.graph");
+    char mpath[512]; fixture_path(mpath, sizeof(mpath), "malformed.graph");
+    ArcFixtureResult fr = arc_fixture_parse_file(mpath);
     ASSERT(!fr.success);
     ASSERT(strlen(fr.error) > 0);
     if (fr.success) arc_graph_free(&fr.graph);
@@ -1488,12 +1519,14 @@ TEST(test_e2e_not_operator) {
     ASSERT(result.tag == VAL_BOOL);
     ASSERT(result.as.b == false);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
 
 TEST(test_e2e_not_via_fixture) {
-    ArcFixtureResult fr = arc_fixture_parse_file("../tests/fixtures/not_true.graph");
+    char path[512]; fixture_path(path, sizeof(path), "not_true.graph");
+    ArcFixtureResult fr = arc_fixture_parse_file(path);
     ASSERT(fr.success);
 
     ArcCompileResult cr = arc_compile(&fr.graph);
@@ -1509,6 +1542,7 @@ TEST(test_e2e_not_via_fixture) {
     ASSERT(result.tag == VAL_BOOL);
     ASSERT(result.as.b == false);
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&fr.graph);
 }
@@ -1654,6 +1688,7 @@ TEST(test_vm_globals) {
     ASSERT(arc_vm_result(&vm).tag == VAL_I64);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
 
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -1665,35 +1700,29 @@ TEST(test_vm_globals) {
  * ================================================================ */
 
 TEST(test_string_values) {
-    /* Test ArcString creation, equality, refcounting */
-    ArcString* s1 = arc_string_new("hello", 5);
+    /* Test GC-managed string creation and equality */
+    ArcGC gc;
+    arc_gc_init(&gc);
+
+    ArcObjString* s1 = arc_obj_string_new(&gc, "hello", 5);
     ASSERT(s1->len == 5);
     ASSERT(strcmp(s1->data, "hello") == 0);
-    ASSERT(s1->refcount == 1);
 
-    arc_string_retain(s1);
-    ASSERT(s1->refcount == 2);
-
-    ArcString* s2 = arc_string_new("hello", 5);
-    ArcValue v1 = arc_val_string(s1);
-    ArcValue v2 = arc_val_string(s2);
+    ArcObjString* s2 = arc_obj_string_new(&gc, "hello", 5);
+    ArcValue v1 = arc_val_obj((ArcObject*)s1);
+    ArcValue v2 = arc_val_obj((ArcObject*)s2);
     ASSERT(arc_val_equal(v1, v2));
     ASSERT(arc_val_is_truthy(v1));
 
-    ArcString* empty = arc_string_new("", 0);
-    ArcValue ve = arc_val_string(empty);
-    ASSERT(!arc_val_is_truthy(ve));
+    ArcObjString* empty = arc_obj_string_new(&gc, "", 0);
+    ArcValue ve = arc_val_obj((ArcObject*)empty);
+    ASSERT(arc_val_is_truthy(ve));  /* non-null object is truthy */
 
-    arc_string_release(s1);
-    ASSERT(s1->refcount == 1);
-    arc_string_release(s1);
-    /* s1 freed now */
-    arc_string_release(s2);
-    arc_string_release(empty);
+    arc_gc_free_all(&gc);
 }
 
 TEST(test_vm_string_const) {
-    /* Load a string constant and verify it becomes a VAL_STRING */
+    /* Load a string constant and verify it becomes a VAL_OBJ string */
     ArcBytecodeImage img;
     arc_image_init(&img);
 
@@ -1714,11 +1743,12 @@ TEST(test_vm_string_const) {
     ArcStatus s = arc_vm_run(&vm);
     ASSERT(s == ARC_OK);
     ArcValue result = arc_vm_result(&vm);
-    ASSERT(result.tag == VAL_STRING);
-    ASSERT(result.as.str != NULL);
-    ASSERT(strcmp(result.as.str->data, "hello") == 0);
+    ASSERT(result.tag == VAL_OBJ);
+    ASSERT(result.as.obj != NULL);
+    ASSERT(ARC_OBJ_TYPE(result.as.obj) == OBJ_STRING);
+    ASSERT(strcmp(ARC_AS_STRING(result)->data, "hello") == 0);
 
-    arc_string_release(result.as.str);
+    arc_vm_destroy(&vm);
     ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
@@ -1897,6 +1927,7 @@ TEST(test_ref_interp_5_plus_10) {
     /* Differential comparison */
     ASSERT(arc_val_equal(ir.result, vm_result));
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
@@ -1971,6 +2002,7 @@ TEST(test_ref_interp_function) {
     /* Differential comparison */
     ASSERT(arc_val_equal(ir.result, arc_vm_result(&vm)));
 
+    arc_vm_destroy(&vm);
     arc_compile_result_free(&cr);
     arc_graph_free(&g);
 }
@@ -2516,6 +2548,578 @@ TEST(test_graph_validation_bidirectional_port) {
 }
 
 /* ================================================================
+ * VM Completeness Tests — GC, Strings, Bitwise, Arrays, Maps,
+ *                         Exceptions, Type Casts, Intrinsics
+ * ================================================================ */
+
+/* Helper: build a single-function image, run it, return result.
+ * Caller must call arc_vm_destroy() on the VM when done. */
+static ArcVm run_bytecode(ArcBytecodeImage* img, ArcBuf* code, uint16_t local_count, uint16_t max_stack) {
+    uint16_t name = arc_const_pool_add_string(&img->constants, "main", 4);
+    img->code = code->data; img->code_len = (uint32_t)code->len;
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = local_count,
+                         .max_stack = max_stack, .code_offset = 0, .code_length = img->code_len };
+    arc_func_table_add(&img->functions, fr);
+    ArcVm vm;
+    arc_vm_init(&vm, img);
+    vm.output = fopen(DEV_NULL, "w");  /* suppress output */
+    arc_vm_run(&vm);
+    return vm;
+}
+
+static void cleanup_vm_test(ArcVm* vm, ArcBytecodeImage* img, ArcBuf* code) {
+    if (vm->output && vm->output != stdout) fclose(vm->output);
+    arc_vm_destroy(vm);
+    if (code) ARC_FREE(code->data);
+    arc_const_pool_free(&img->constants);
+    arc_func_table_free(&img->functions);
+    arc_debug_table_free(&img->debug);
+}
+
+/* --- GC tests --- */
+
+TEST(test_gc_collect_unreachable) {
+    ArcGC gc; arc_gc_init(&gc);
+    /* Allocate objects then make them unreachable */
+    arc_obj_string_new(&gc, "garbage1", 8);
+    arc_obj_string_new(&gc, "garbage2", 8);
+    ASSERT(gc.objects != NULL);
+    /* Collect with empty roots — all should be freed */
+    arc_gc_collect(&gc, NULL, 0, NULL, 0, NULL);
+    ASSERT(gc.objects == NULL);
+    arc_gc_free_all(&gc);
+}
+
+TEST(test_gc_preserve_reachable) {
+    ArcGC gc; arc_gc_init(&gc);
+    ArcObjString* s1 = arc_obj_string_new(&gc, "keep", 4);
+    arc_obj_string_new(&gc, "discard", 7);
+    /* Put s1 on a fake stack */
+    ArcValue stack[1] = { arc_val_obj((ArcObject*)s1) };
+    arc_gc_collect(&gc, stack, 1, NULL, 0, NULL);
+    /* s1 should survive, discard should be freed */
+    ASSERT(gc.objects != NULL);
+    ASSERT(gc.objects->next == NULL);  /* only one object remains */
+    ASSERT(strcmp(((ArcObjString*)gc.objects)->data, "keep") == 0);
+    arc_gc_free_all(&gc);
+}
+
+TEST(test_gc_array_tracing) {
+    ArcGC gc; arc_gc_init(&gc);
+    ArcObjArray* arr = arc_obj_array_new(&gc, 4);
+    ArcObjString* s = arc_obj_string_new(&gc, "inside", 6);
+    arc_obj_array_push(arr, arc_val_obj((ArcObject*)s));
+    arc_obj_string_new(&gc, "outside", 7);  /* unreachable */
+    ArcValue stack[1] = { arc_val_obj((ArcObject*)arr) };
+    arc_gc_collect(&gc, stack, 1, NULL, 0, NULL);
+    /* arr and s survive, "outside" is collected */
+    ASSERT(arr->count == 1);
+    ASSERT(ARC_IS_STRING(arr->items[0]));
+    ASSERT(strcmp(ARC_AS_STRING(arr->items[0])->data, "inside") == 0);
+    arc_gc_free_all(&gc);
+}
+
+TEST(test_gc_map_tracing) {
+    ArcGC gc; arc_gc_init(&gc);
+    ArcObjMap* map = arc_obj_map_new(&gc, 4);
+    ArcObjString* key = arc_obj_string_new(&gc, "k", 1);
+    ArcObjString* val = arc_obj_string_new(&gc, "v", 1);
+    arc_obj_map_set(map, arc_val_obj((ArcObject*)key), arc_val_obj((ArcObject*)val));
+    arc_obj_string_new(&gc, "orphan", 6);
+    ArcValue stack[1] = { arc_val_obj((ArcObject*)map) };
+    arc_gc_collect(&gc, stack, 1, NULL, 0, NULL);
+    /* map, key, val survive; orphan collected */
+    ArcValue out;
+    ASSERT(arc_obj_map_get(map, arc_val_obj((ArcObject*)key), &out));
+    ASSERT(ARC_IS_STRING(out));
+    arc_gc_free_all(&gc);
+}
+
+/* --- String concat via OP_ADD --- */
+
+TEST(test_vm_string_concat) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c1 = arc_const_pool_add_string(&img.constants, "hello ", 6);
+    uint16_t c2 = arc_const_pool_add_string(&img.constants, "world", 5);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c2);
+    arc_buf_push(&code, OP_ADD);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(ARC_IS_STRING(r));
+    ASSERT(strcmp(ARC_AS_STRING(r)->data, "hello world") == 0);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- String ops --- */
+
+TEST(test_vm_str_len) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t cs = arc_const_pool_add_string(&img.constants, "abcde", 5);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cs);
+    arc_buf_push(&code, OP_STR_LEN);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(r.tag == VAL_I64);
+    ASSERT_EQ_I64(r.as.i64, 5);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_str_slice) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t cs = arc_const_pool_add_string(&img.constants, "hello world", 11);
+    uint16_t c0 = arc_const_pool_add_i64(&img.constants, 0);
+    uint16_t c5 = arc_const_pool_add_i64(&img.constants, 5);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cs);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c0);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c5);
+    arc_buf_push(&code, OP_STR_SLICE);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 3);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(ARC_IS_STRING(r));
+    ASSERT(strcmp(ARC_AS_STRING(r)->data, "hello") == 0);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_str_index) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t cs = arc_const_pool_add_string(&img.constants, "abc", 3);
+    uint16_t c1 = arc_const_pool_add_i64(&img.constants, 1);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cs);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_STR_INDEX);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(ARC_IS_STRING(r));
+    ASSERT(strcmp(ARC_AS_STRING(r)->data, "b") == 0);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- Bitwise ops --- */
+
+TEST(test_vm_bitwise_and) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ca = arc_const_pool_add_i64(&img.constants, 0xFF);
+    uint16_t cb = arc_const_pool_add_i64(&img.constants, 0x0F);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ca);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cb);
+    arc_buf_push(&code, OP_BIT_AND);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT_EQ_I64(r.as.i64, 0x0F);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_bitwise_or_xor) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ca = arc_const_pool_add_i64(&img.constants, 0xA0);
+    uint16_t cb = arc_const_pool_add_i64(&img.constants, 0x0B);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ca);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cb);
+    arc_buf_push(&code, OP_BIT_OR);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 0xAB);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_bitwise_not) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ca = arc_const_pool_add_i64(&img.constants, 0);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ca);
+    arc_buf_push(&code, OP_BIT_NOT);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 1);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, -1);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_shift) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c1 = arc_const_pool_add_i64(&img.constants, 1);
+    uint16_t c4 = arc_const_pool_add_i64(&img.constants, 4);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c4);
+    arc_buf_push(&code, OP_SHL);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 16);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- Type casts --- */
+
+TEST(test_vm_cast_i64) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t cf = arc_const_pool_add_f64(&img.constants, 3.7);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cf);
+    arc_buf_push(&code, OP_CAST_I64);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 1);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 3);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_cast_f64) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ci = arc_const_pool_add_i64(&img.constants, 42);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ci);
+    arc_buf_push(&code, OP_CAST_F64);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 1);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(r.tag == VAL_F64);
+    ASSERT(r.as.f64 == 42.0);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_cast_str) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ci = arc_const_pool_add_i64(&img.constants, 123);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ci);
+    arc_buf_push(&code, OP_CAST_STR);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 1);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(ARC_IS_STRING(r));
+    ASSERT(strcmp(ARC_AS_STRING(r)->data, "123") == 0);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_cast_str_from_string) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t cs = arc_const_pool_add_string(&img.constants, "42", 2);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cs);
+    arc_buf_push(&code, OP_CAST_I64);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 1);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- Arrays --- */
+
+TEST(test_vm_array_new) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c1 = arc_const_pool_add_i64(&img.constants, 10);
+    uint16_t c2 = arc_const_pool_add_i64(&img.constants, 20);
+    uint16_t c3 = arc_const_pool_add_i64(&img.constants, 30);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c2);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c3);
+    arc_buf_push(&code, OP_ARRAY_NEW); arc_buf_push_u16(&code, 3);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 4);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(ARC_IS_ARRAY(r));
+    ArcObjArray* arr = ARC_AS_ARRAY(r);
+    ASSERT(arr->count == 3);
+    ASSERT_EQ_I64(arr->items[0].as.i64, 10);
+    ASSERT_EQ_I64(arr->items[1].as.i64, 20);
+    ASSERT_EQ_I64(arr->items[2].as.i64, 30);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_index_get_set) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c1 = arc_const_pool_add_i64(&img.constants, 10);
+    uint16_t c2 = arc_const_pool_add_i64(&img.constants, 20);
+    uint16_t c0 = arc_const_pool_add_i64(&img.constants, 0);
+    uint16_t c99 = arc_const_pool_add_i64(&img.constants, 99);
+    ArcBuf code; arc_buf_init(&code);
+    /* Create array [10, 20] */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c2);
+    arc_buf_push(&code, OP_ARRAY_NEW); arc_buf_push_u16(&code, 2);
+    /* Store in local 0 */
+    arc_buf_push(&code, OP_STORE_LOCAL); arc_buf_push_u16(&code, 0);
+    /* Set arr[0] = 99 */
+    arc_buf_push(&code, OP_LOAD_LOCAL); arc_buf_push_u16(&code, 0);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c0);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c99);
+    arc_buf_push(&code, OP_INDEX_SET);
+    /* Get arr[0] */
+    arc_buf_push(&code, OP_LOAD_LOCAL); arc_buf_push_u16(&code, 0);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c0);
+    arc_buf_push(&code, OP_INDEX_GET);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 1, 4);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 99);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_array_length) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c1 = arc_const_pool_add_i64(&img.constants, 1);
+    uint16_t c2 = arc_const_pool_add_i64(&img.constants, 2);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c2);
+    arc_buf_push(&code, OP_ARRAY_NEW); arc_buf_push_u16(&code, 2);
+    arc_buf_push(&code, OP_LENGTH);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 3);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 2);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- Maps --- */
+
+TEST(test_vm_map_new) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ck = arc_const_pool_add_string(&img.constants, "x", 1);
+    uint16_t cv = arc_const_pool_add_i64(&img.constants, 42);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ck);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cv);
+    arc_buf_push(&code, OP_MAP_NEW); arc_buf_push_u16(&code, 1);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 3);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(ARC_IS_MAP(r));
+    ArcObjMap* map = ARC_AS_MAP(r);
+    ASSERT(map->count == 1);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_map_get) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ck = arc_const_pool_add_string(&img.constants, "x", 1);
+    uint16_t cv = arc_const_pool_add_i64(&img.constants, 42);
+    ArcBuf code; arc_buf_init(&code);
+    /* Create map {"x": 42} */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ck);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cv);
+    arc_buf_push(&code, OP_MAP_NEW); arc_buf_push_u16(&code, 1);
+    /* Get map["x"] */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ck);
+    arc_buf_push(&code, OP_INDEX_GET);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 3);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- Exception handling --- */
+
+TEST(test_vm_try_catch_basic) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c42 = arc_const_pool_add_i64(&img.constants, 42);
+    uint16_t c99 = arc_const_pool_add_i64(&img.constants, 99);
+    ArcBuf code; arc_buf_init(&code);
+    /* try_begin (catch at +offset) */
+    arc_buf_push(&code, OP_TRY_BEGIN);
+    uint32_t try_begin_ip = (uint32_t)code.len;
+    arc_buf_push_i32(&code, 0);  /* placeholder */
+    /* throw 42 */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c42);
+    arc_buf_push(&code, OP_THROW);
+    /* if no throw, push 99 and halt */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c99);
+    arc_buf_push(&code, OP_HALT);
+    /* catch block: the thrown value is on stack, halt */
+    uint32_t catch_ip = (uint32_t)code.len;
+    arc_buf_push(&code, OP_HALT);
+    /* Patch the try_begin offset: catch_ip - (try_begin_ip + 4) */
+    int32_t offset = (int32_t)catch_ip - (int32_t)(try_begin_ip + 4);
+    code.data[try_begin_ip] = (uint8_t)(offset & 0xFF);
+    code.data[try_begin_ip+1] = (uint8_t)((offset >> 8) & 0xFF);
+    code.data[try_begin_ip+2] = (uint8_t)((offset >> 16) & 0xFF);
+    code.data[try_begin_ip+3] = (uint8_t)((offset >> 24) & 0xFF);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    /* Caught value should be 42 */
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_try_end_no_throw) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c99 = arc_const_pool_add_i64(&img.constants, 99);
+    ArcBuf code; arc_buf_init(&code);
+    /* try_begin with catch offset pointing past the halt */
+    arc_buf_push(&code, OP_TRY_BEGIN);
+    uint32_t try_begin_ip = (uint32_t)code.len;
+    arc_buf_push_i32(&code, 0);  /* placeholder */
+    /* No throw; push 99 */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c99);
+    arc_buf_push(&code, OP_TRY_END);
+    arc_buf_push(&code, OP_HALT);
+    /* Patch: catch just points to halt (never reached) */
+    uint32_t catch_ip = (uint32_t)code.len;
+    arc_buf_push(&code, OP_HALT);
+    int32_t offset = (int32_t)catch_ip - (int32_t)(try_begin_ip + 4);
+    code.data[try_begin_ip] = (uint8_t)(offset & 0xFF);
+    code.data[try_begin_ip+1] = (uint8_t)((offset >> 8) & 0xFF);
+    code.data[try_begin_ip+2] = (uint8_t)((offset >> 16) & 0xFF);
+    code.data[try_begin_ip+3] = (uint8_t)((offset >> 24) & 0xFF);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 99);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_unhandled_throw) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c1 = arc_const_pool_add_i64(&img.constants, 1);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_THROW);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 1);
+    ASSERT(vm.error.code == ARC_ERR_RUNTIME);
+    ASSERT(strstr(vm.error.message, "unhandled") != NULL);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- Intrinsics: type, assert, len --- */
+
+TEST(test_vm_intrinsic_type) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ci = arc_const_pool_add_i64(&img.constants, 5);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ci);
+    arc_buf_push(&code, OP_INTRINSIC);
+    arc_buf_push_u16(&code, ARC_INTRINSIC_TYPE);
+    arc_buf_push(&code, 1); arc_buf_push(&code, 0);  /* argc=1 + padding */
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ArcValue r = arc_vm_result(&vm);
+    ASSERT(ARC_IS_STRING(r));
+    ASSERT(strcmp(ARC_AS_STRING(r)->data, "i64") == 0);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_intrinsic_assert_pass) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ct = arc_const_pool_add_bool(&img.constants, true);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ct);
+    arc_buf_push(&code, OP_INTRINSIC);
+    arc_buf_push_u16(&code, ARC_INTRINSIC_ASSERT);
+    arc_buf_push(&code, 1); arc_buf_push(&code, 0);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ASSERT(vm.error.code == ARC_OK);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_intrinsic_assert_fail) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t cf = arc_const_pool_add_bool(&img.constants, false);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cf);
+    arc_buf_push(&code, OP_INTRINSIC);
+    arc_buf_push_u16(&code, ARC_INTRINSIC_ASSERT);
+    arc_buf_push(&code, 1); arc_buf_push(&code, 0);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ASSERT(vm.error.code == ARC_ERR_RUNTIME);
+    ASSERT(strstr(vm.error.message, "assertion failed") != NULL);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_intrinsic_len) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t cs = arc_const_pool_add_string(&img.constants, "test", 4);
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cs);
+    arc_buf_push(&code, OP_INTRINSIC);
+    arc_buf_push_u16(&code, ARC_INTRINSIC_LEN);
+    arc_buf_push(&code, 1); arc_buf_push(&code, 0);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 2);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 4);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_intrinsic_push) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t c1 = arc_const_pool_add_i64(&img.constants, 10);
+    uint16_t c2 = arc_const_pool_add_i64(&img.constants, 20);
+    ArcBuf code; arc_buf_init(&code);
+    /* Create array [10] */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c1);
+    arc_buf_push(&code, OP_ARRAY_NEW); arc_buf_push_u16(&code, 1);
+    arc_buf_push(&code, OP_STORE_LOCAL); arc_buf_push_u16(&code, 0);  /* slot 0 */
+    /* push(arr, 20) */
+    arc_buf_push(&code, OP_LOAD_LOCAL); arc_buf_push_u16(&code, 0);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c2);
+    arc_buf_push(&code, OP_INTRINSIC);
+    arc_buf_push_u16(&code, ARC_INTRINSIC_PUSH);
+    arc_buf_push(&code, 2); arc_buf_push(&code, 0);
+    arc_buf_push(&code, OP_POP);  /* discard null return */
+    /* Get length */
+    arc_buf_push(&code, OP_LOAD_LOCAL); arc_buf_push_u16(&code, 0);
+    arc_buf_push(&code, OP_LENGTH);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 1, 4);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 2);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+TEST(test_vm_intrinsic_keys) {
+    ArcBytecodeImage img; arc_image_init(&img);
+    uint16_t ck1 = arc_const_pool_add_string(&img.constants, "a", 1);
+    uint16_t cv1 = arc_const_pool_add_i64(&img.constants, 1);
+    uint16_t ck2 = arc_const_pool_add_string(&img.constants, "b", 1);
+    uint16_t cv2 = arc_const_pool_add_i64(&img.constants, 2);
+    ArcBuf code; arc_buf_init(&code);
+    /* Create map {"a": 1, "b": 2} */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ck1);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cv1);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, ck2);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cv2);
+    arc_buf_push(&code, OP_MAP_NEW); arc_buf_push_u16(&code, 2);
+    /* keys(map) */
+    arc_buf_push(&code, OP_INTRINSIC);
+    arc_buf_push_u16(&code, ARC_INTRINSIC_KEYS);
+    arc_buf_push(&code, 1); arc_buf_push(&code, 0);
+    /* length of result */
+    arc_buf_push(&code, OP_LENGTH);
+    arc_buf_push(&code, OP_HALT);
+    ArcVm vm = run_bytecode(&img, &code, 0, 5);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 2);
+    cleanup_vm_test(&vm, &img, &code);
+}
+
+/* --- GC stress test --- */
+
+TEST(test_gc_stress) {
+    ArcGC gc; arc_gc_init(&gc);
+    /* Allocate many strings to trigger GC threshold */
+    ArcObjString* keeper = arc_obj_string_new(&gc, "root", 4);
+    for (int i = 0; i < 500; i++) {
+        arc_obj_string_new(&gc, "temp", 4);
+    }
+    /* Collect with keeper as only root */
+    ArcValue stack[1] = { arc_val_obj((ArcObject*)keeper) };
+    arc_gc_collect(&gc, stack, 1, NULL, 0, NULL);
+    /* Only keeper should remain */
+    int count = 0;
+    for (ArcObject* o = gc.objects; o; o = o->next) count++;
+    ASSERT(count == 1);
+    ASSERT(strcmp(keeper->data, "root") == 0);
+    arc_gc_free_all(&gc);
+}
+
+/* ================================================================
  * Main
  * ================================================================ */
 
@@ -2635,6 +3239,53 @@ int main(void) {
 
     printf("\n[Enhanced Graph Validation]\n");
     RUN(test_graph_validation_bidirectional_port);
+
+    printf("\n[GC]\n");
+    RUN(test_gc_collect_unreachable);
+    RUN(test_gc_preserve_reachable);
+    RUN(test_gc_array_tracing);
+    RUN(test_gc_map_tracing);
+    RUN(test_gc_stress);
+
+    printf("\n[String Operations]\n");
+    RUN(test_vm_string_concat);
+    RUN(test_vm_str_len);
+    RUN(test_vm_str_slice);
+    RUN(test_vm_str_index);
+
+    printf("\n[Bitwise Operations]\n");
+    RUN(test_vm_bitwise_and);
+    RUN(test_vm_bitwise_or_xor);
+    RUN(test_vm_bitwise_not);
+    RUN(test_vm_shift);
+
+    printf("\n[Type Casts]\n");
+    RUN(test_vm_cast_i64);
+    RUN(test_vm_cast_f64);
+    RUN(test_vm_cast_str);
+    RUN(test_vm_cast_str_from_string);
+
+    printf("\n[Arrays]\n");
+    RUN(test_vm_array_new);
+    RUN(test_vm_index_get_set);
+    RUN(test_vm_array_length);
+
+    printf("\n[Maps]\n");
+    RUN(test_vm_map_new);
+    RUN(test_vm_map_get);
+
+    printf("\n[Exception Handling]\n");
+    RUN(test_vm_try_catch_basic);
+    RUN(test_vm_try_end_no_throw);
+    RUN(test_vm_unhandled_throw);
+
+    printf("\n[Extended Intrinsics]\n");
+    RUN(test_vm_intrinsic_type);
+    RUN(test_vm_intrinsic_assert_pass);
+    RUN(test_vm_intrinsic_assert_fail);
+    RUN(test_vm_intrinsic_len);
+    RUN(test_vm_intrinsic_push);
+    RUN(test_vm_intrinsic_keys);
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);
