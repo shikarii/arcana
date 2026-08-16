@@ -51,6 +51,7 @@ typedef enum {
 typedef enum {
     ARC_PORT_INPUT,
     ARC_PORT_OUTPUT,
+    ARC_PORT_BIDIRECTIONAL,   /* future: capture, boundary ports */
 } ArcPortDir;
 
 /* --- Port --- */

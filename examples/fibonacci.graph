@@ -1,0 +1,63 @@
+# Example: Fibonacci
+#
+# Computes fib(10) = 55 using recursion.
+# Demonstrates functions, branching, and recursive calls.
+#
+# Expected output: 55
+
+region r0 module
+
+# Function: fib(n)
+node n_fib func_def(fib) in r0 arity=1 body_region=r1
+
+region r1 function parent=r0
+node n_param param(n) in r1
+
+# if (n <= 1) return n
+node n_ref0 var_ref(n) in r1
+node n_one const_int(1) in r1
+node n_le le in r1 ports=[lhs,rhs,out] cyclic=[lhs,rhs,out]
+edge e_le0 n_ref0.out -> n_le.lhs
+edge e_le1 n_one.out -> n_le.rhs
+
+node n_if if in r1 then_region=r2 else_region=r3
+edge e_cond n_le.out -> n_if.cond
+
+# then: return n
+region r2 then parent=r1
+node n_ref1 var_ref(n) in r2
+node n_ret1 return in r2
+edge e_ret1 n_ref1.out -> n_ret1.value
+
+# else: return fib(n-1) + fib(n-2)
+region r3 else parent=r1
+node n_ref2 var_ref(n) in r3
+node n_one2 const_int(1) in r3
+node n_sub1 sub in r3 ports=[lhs,rhs,out] cyclic=[lhs,rhs,out]
+edge e_s1a n_ref2.out -> n_sub1.lhs
+edge e_s1b n_one2.out -> n_sub1.rhs
+
+node n_call1 func_call(fib) in r3 ports=[arg0,out] cyclic=[arg0,out]
+edge e_c1 n_sub1.out -> n_call1.arg0
+
+node n_ref3 var_ref(n) in r3
+node n_two const_int(2) in r3
+node n_sub2 sub in r3 ports=[lhs,rhs,out] cyclic=[lhs,rhs,out]
+edge e_s2a n_ref3.out -> n_sub2.lhs
+edge e_s2b n_two.out -> n_sub2.rhs
+
+node n_call2 func_call(fib) in r3 ports=[arg0,out] cyclic=[arg0,out]
+edge e_c2 n_sub2.out -> n_call2.arg0
+
+node n_add add in r3 ports=[lhs,rhs,out] cyclic=[lhs,rhs,out]
+edge e_a1 n_call1.out -> n_add.lhs
+edge e_a2 n_call2.out -> n_add.rhs
+
+node n_ret2 return in r3
+edge e_ret2 n_add.out -> n_ret2.value
+
+# Main: call fib(10) and output
+node n_ten const_int(10) in r0
+node n_call func_call(fib) in r0 ports=[arg0,out] cyclic=[arg0,out]
+edge e_main n_ten.out -> n_call.arg0
+root n_call.out
