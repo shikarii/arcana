@@ -2567,9 +2567,10 @@ static ArcVm run_bytecode(ArcBytecodeImage* img, ArcBuf* code, uint16_t local_co
     return vm;
 }
 
-static void cleanup_vm_test(ArcVm* vm, ArcBytecodeImage* img) {
+static void cleanup_vm_test(ArcVm* vm, ArcBytecodeImage* img, ArcBuf* code) {
     if (vm->output && vm->output != stdout) fclose(vm->output);
     arc_vm_destroy(vm);
+    if (code) ARC_FREE(code->data);
     arc_const_pool_free(&img->constants);
     arc_func_table_free(&img->functions);
     arc_debug_table_free(&img->debug);
@@ -2649,7 +2650,7 @@ TEST(test_vm_string_concat) {
     ArcValue r = arc_vm_result(&vm);
     ASSERT(ARC_IS_STRING(r));
     ASSERT(strcmp(ARC_AS_STRING(r)->data, "hello world") == 0);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- String ops --- */
@@ -2665,7 +2666,7 @@ TEST(test_vm_str_len) {
     ArcValue r = arc_vm_result(&vm);
     ASSERT(r.tag == VAL_I64);
     ASSERT_EQ_I64(r.as.i64, 5);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_str_slice) {
@@ -2683,7 +2684,7 @@ TEST(test_vm_str_slice) {
     ArcValue r = arc_vm_result(&vm);
     ASSERT(ARC_IS_STRING(r));
     ASSERT(strcmp(ARC_AS_STRING(r)->data, "hello") == 0);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_str_index) {
@@ -2699,7 +2700,7 @@ TEST(test_vm_str_index) {
     ArcValue r = arc_vm_result(&vm);
     ASSERT(ARC_IS_STRING(r));
     ASSERT(strcmp(ARC_AS_STRING(r)->data, "b") == 0);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- Bitwise ops --- */
@@ -2716,7 +2717,7 @@ TEST(test_vm_bitwise_and) {
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     ArcValue r = arc_vm_result(&vm);
     ASSERT_EQ_I64(r.as.i64, 0x0F);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_bitwise_or_xor) {
@@ -2730,7 +2731,7 @@ TEST(test_vm_bitwise_or_xor) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 0xAB);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_bitwise_not) {
@@ -2742,7 +2743,7 @@ TEST(test_vm_bitwise_not) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 1);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, -1);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_shift) {
@@ -2756,7 +2757,7 @@ TEST(test_vm_shift) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 16);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- Type casts --- */
@@ -2770,7 +2771,7 @@ TEST(test_vm_cast_i64) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 1);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 3);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_cast_f64) {
@@ -2784,7 +2785,7 @@ TEST(test_vm_cast_f64) {
     ArcValue r = arc_vm_result(&vm);
     ASSERT(r.tag == VAL_F64);
     ASSERT(r.as.f64 == 42.0);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_cast_str) {
@@ -2798,7 +2799,7 @@ TEST(test_vm_cast_str) {
     ArcValue r = arc_vm_result(&vm);
     ASSERT(ARC_IS_STRING(r));
     ASSERT(strcmp(ARC_AS_STRING(r)->data, "123") == 0);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_cast_str_from_string) {
@@ -2810,7 +2811,7 @@ TEST(test_vm_cast_str_from_string) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 1);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- Arrays --- */
@@ -2834,7 +2835,7 @@ TEST(test_vm_array_new) {
     ASSERT_EQ_I64(arr->items[0].as.i64, 10);
     ASSERT_EQ_I64(arr->items[1].as.i64, 20);
     ASSERT_EQ_I64(arr->items[2].as.i64, 30);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_index_get_set) {
@@ -2862,7 +2863,7 @@ TEST(test_vm_index_get_set) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 1, 4);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 99);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_array_length) {
@@ -2877,7 +2878,7 @@ TEST(test_vm_array_length) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 3);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 2);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- Maps --- */
@@ -2896,7 +2897,7 @@ TEST(test_vm_map_new) {
     ASSERT(ARC_IS_MAP(r));
     ArcObjMap* map = ARC_AS_MAP(r);
     ASSERT(map->count == 1);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_map_get) {
@@ -2914,7 +2915,7 @@ TEST(test_vm_map_get) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 3);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- Exception handling --- */
@@ -2946,7 +2947,7 @@ TEST(test_vm_try_catch_basic) {
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     /* Caught value should be 42 */
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_try_end_no_throw) {
@@ -2971,7 +2972,7 @@ TEST(test_vm_try_end_no_throw) {
     code.data[try_begin_ip+3] = (uint8_t)((offset >> 24) & 0xFF);
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 99);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_unhandled_throw) {
@@ -2984,7 +2985,7 @@ TEST(test_vm_unhandled_throw) {
     ArcVm vm = run_bytecode(&img, &code, 0, 1);
     ASSERT(vm.error.code == ARC_ERR_RUNTIME);
     ASSERT(strstr(vm.error.message, "unhandled") != NULL);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- Intrinsics: type, assert, len --- */
@@ -3002,7 +3003,7 @@ TEST(test_vm_intrinsic_type) {
     ArcValue r = arc_vm_result(&vm);
     ASSERT(ARC_IS_STRING(r));
     ASSERT(strcmp(ARC_AS_STRING(r)->data, "i64") == 0);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_intrinsic_assert_pass) {
@@ -3016,7 +3017,7 @@ TEST(test_vm_intrinsic_assert_pass) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     ASSERT(vm.error.code == ARC_OK);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_intrinsic_assert_fail) {
@@ -3031,7 +3032,7 @@ TEST(test_vm_intrinsic_assert_fail) {
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     ASSERT(vm.error.code == ARC_ERR_RUNTIME);
     ASSERT(strstr(vm.error.message, "assertion failed") != NULL);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_intrinsic_len) {
@@ -3045,7 +3046,7 @@ TEST(test_vm_intrinsic_len) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 2);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 4);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_intrinsic_push) {
@@ -3070,7 +3071,7 @@ TEST(test_vm_intrinsic_push) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 1, 4);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 2);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 TEST(test_vm_intrinsic_keys) {
@@ -3095,7 +3096,7 @@ TEST(test_vm_intrinsic_keys) {
     arc_buf_push(&code, OP_HALT);
     ArcVm vm = run_bytecode(&img, &code, 0, 5);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 2);
-    cleanup_vm_test(&vm, &img);
+    cleanup_vm_test(&vm, &img, &code);
 }
 
 /* --- GC stress test --- */
