@@ -12,6 +12,12 @@ else()
     add_compile_options(-Wall -Wextra -Werror -Wno-unused-parameter)
 endif()
 
+# --- Library: arcana_platform ---
+add_library(arcana_platform STATIC
+    src/platform/platform.c
+)
+target_include_directories(arcana_platform PUBLIC src)
+
 # --- Library: arcana_bytecode ---
 add_library(arcana_bytecode STATIC
     src/bytecode/format.c
@@ -38,6 +44,24 @@ add_library(arcana_semantic_graph STATIC
 )
 target_include_directories(arcana_semantic_graph PUBLIC src)
 
+# --- Library: arcana_hir ---
+add_library(arcana_hir STATIC
+    src/hir/hir.c
+)
+target_include_directories(arcana_hir PUBLIC src)
+
+# --- Library: arcana_mir ---
+add_library(arcana_mir STATIC
+    src/mir/mir.c
+)
+target_include_directories(arcana_mir PUBLIC src)
+
+# --- Library: arcana_semantic ---
+add_library(arcana_semantic STATIC
+    src/semantic/semantic.c
+)
+target_link_libraries(arcana_semantic PUBLIC arcana_semantic_graph arcana_hir)
+
 # --- Library: arcana_compiler ---
 add_library(arcana_compiler STATIC
     src/compiler/compiler.c
@@ -61,6 +85,10 @@ target_link_libraries(arcana_tests
     arcana_semantic_graph
     arcana_compiler
     arcana_interpreter
+    arcana_hir
+    arcana_mir
+    arcana_semantic
+    arcana_platform
 )
 
 # --- CLI tools ---
@@ -79,7 +107,16 @@ target_link_libraries(arcana-asm arcana_bytecode)
 
 # --- Compiler CLI ---
 add_executable(arcana-compile tools/arcana-compile.c)
-target_link_libraries(arcana-compile arcana_semantic_graph arcana_compiler arcana_bytecode arcana_verifier)
+target_link_libraries(arcana-compile
+    arcana_semantic_graph arcana_compiler arcana_bytecode arcana_verifier
+    arcana_hir arcana_mir arcana_semantic
+)
+
+# --- Benchmark (optional, not part of test suite) ---
+add_executable(arcana-bench benchmarks/bench_compile.c)
+target_link_libraries(arcana-bench
+    arcana_semantic_graph arcana_compiler arcana_bytecode
+)
 
 enable_testing()
 add_test(NAME arcana_tests COMMAND arcana_tests)

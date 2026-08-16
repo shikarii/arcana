@@ -135,6 +135,12 @@ ArcGraphValidation arc_graph_validate(const ArcGraph* g) {
         }
     }
 
+    /* Check node IDs are unique and sequential */
+    for (uint32_t i = 0; i < g->node_count; i++) {
+        if (g->nodes[i].id != i)
+            vadd(&v, "node at index %u has mismatched id %u", i, g->nodes[i].id);
+    }
+
     /* Check nodes */
     for (uint32_t i = 0; i < g->node_count; i++) {
         const ArcNode* n = &g->nodes[i];
@@ -142,9 +148,21 @@ ArcGraphValidation arc_graph_validate(const ArcGraph* g) {
             vadd(&v, "node %u has invalid region %u", i, n->region);
 
         /* Cyclic order must contain exactly the node's ports */
-        if (n->cyclic_count > 0 && n->cyclic_count != n->port_count)
-            vadd(&v, "node %u cyclic order count %u != port count %u",
-                 i, n->cyclic_count, n->port_count);
+        if (n->cyclic_count > 0) {
+            if (n->cyclic_count != n->port_count)
+                vadd(&v, "node %u cyclic order count %u != port count %u",
+                     i, n->cyclic_count, n->port_count);
+            /* Each port must appear exactly once in cyclic order */
+            for (uint32_t ci = 0; ci < n->cyclic_count; ci++) {
+                bool found = false;
+                for (uint32_t pi = 0; pi < n->port_count; pi++) {
+                    if (n->cyclic_order[ci] == n->ports[pi]) { found = true; break; }
+                }
+                if (!found)
+                    vadd(&v, "node %u cyclic order entry %u references unknown port %u",
+                         i, ci, n->cyclic_order[ci]);
+            }
+        }
     }
 
     /* Check edges */
@@ -160,10 +178,24 @@ ArcGraphValidation arc_graph_validate(const ArcGraph* g) {
             vadd(&v, "edge %u target port %u is not an input", i, e->to);
     }
 
-    /* Check ports */
+    /* Check port IDs are unique and sequential */
     for (uint32_t i = 0; i < g->port_count; i++) {
+        if (g->ports[i].id != i)
+            vadd(&v, "port at index %u has mismatched id %u", i, g->ports[i].id);
         if (g->ports[i].owner >= g->node_count)
             vadd(&v, "port %u has invalid owner node %u", i, g->ports[i].owner);
+    }
+
+    /* Check region IDs are unique and sequential */
+    for (uint32_t i = 0; i < g->region_count; i++) {
+        if (g->regions[i].id != i)
+            vadd(&v, "region at index %u has mismatched id %u", i, g->regions[i].id);
+    }
+
+    /* Check edge IDs are unique and sequential */
+    for (uint32_t i = 0; i < g->edge_count; i++) {
+        if (g->edges[i].id != i)
+            vadd(&v, "edge at index %u has mismatched id %u", i, g->edges[i].id);
     }
 
     return v;

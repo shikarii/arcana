@@ -233,8 +233,7 @@ static bool assemble_line(Assembler* a, char* line) {
         } else {
             /* Label fixup */
             if (a->fixup_count < MAX_LABELS) {
-                strncpy(a->fixups[a->fixup_count].label, operand, 63);
-                a->fixups[a->fixup_count].label[63] = '\0';
+                snprintf(a->fixups[a->fixup_count].label, 64, "%s", operand);
                 a->fixups[a->fixup_count].patch_pos = (uint32_t)a->code.len;
                 a->fixups[a->fixup_count].instr_end = (uint32_t)(a->code.len + 4);
                 a->fixup_count++;
