@@ -1012,6 +1012,340 @@ TEST(test_e2e_fibonacci) {
 }
 
 /* ================================================================
+ * Milestone J: While loops
+ * ================================================================ */
+
+TEST(test_e2e_while_loop) {
+    /*
+     * def sum_to(n):
+     *     let acc = 0
+     *     let i = 1
+     *     while i <= n:
+     *         acc = acc + i
+     *         i = i + 1
+     *     return acc
+     * output = sum_to(10)  => 55
+     */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+    ArcRegionId r_body = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+    ArcRegionId r_loop = arc_graph_add_region(&g, ARC_REGION_LOOP_BODY, r_body);
+
+    /* FUNC_DEF "sum_to" */
+    ArcNodeId n_fdef = arc_graph_add_node(&g, ARC_NODE_FUNC_DEF, r0, 6001);
+    g.nodes[n_fdef].attr.func.name = "sum_to";
+    g.nodes[n_fdef].attr.func.arity = 1;
+    g.nodes[n_fdef].attr.func.body_region = r_body;
+
+    /* PARAM "n" */
+    ArcNodeId n_param = arc_graph_add_node(&g, ARC_NODE_PARAM, r_body, 6010);
+    g.nodes[n_param].attr.name = "n";
+
+    /* LET acc = 0 */
+    ArcNodeId n_c0 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_body, 6011);
+    g.nodes[n_c0].attr.int_value = 0;
+    ArcPortId p_c0_out = arc_graph_add_port(&g, n_c0, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_let_acc = arc_graph_add_node(&g, ARC_NODE_LET, r_body, 6012);
+    g.nodes[n_let_acc].attr.name = "acc";
+    ArcPortId p_let_acc_val = arc_graph_add_port(&g, n_let_acc, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_c0_out, p_let_acc_val);
+
+    /* LET i = 1 */
+    ArcNodeId n_c1 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_body, 6013);
+    g.nodes[n_c1].attr.int_value = 1;
+    ArcPortId p_c1_out = arc_graph_add_port(&g, n_c1, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_let_i = arc_graph_add_node(&g, ARC_NODE_LET, r_body, 6014);
+    g.nodes[n_let_i].attr.name = "i";
+    ArcPortId p_let_i_val = arc_graph_add_port(&g, n_let_i, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_c1_out, p_let_i_val);
+
+    /* WHILE condition: i <= n */
+    ArcNodeId n_ref_i_w = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 6015);
+    g.nodes[n_ref_i_w].attr.name = "i";
+    ArcPortId p_ref_i_w_out = arc_graph_add_port(&g, n_ref_i_w, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ref_n_w = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 6016);
+    g.nodes[n_ref_n_w].attr.name = "n";
+    ArcPortId p_ref_n_w_out = arc_graph_add_port(&g, n_ref_n_w, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_le_w = arc_graph_add_node(&g, ARC_NODE_LE, r_body, 6017);
+    ArcPortId p_le_w_lhs = arc_graph_add_port(&g, n_le_w, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_le_w_rhs = arc_graph_add_port(&g, n_le_w, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_le_w_out = arc_graph_add_port(&g, n_le_w, ARC_PORT_OUTPUT, "out");
+    ArcPortId le_w_order[] = { p_le_w_lhs, p_le_w_rhs, p_le_w_out };
+    arc_node_set_cyclic_order(&g, n_le_w, le_w_order, 3);
+    arc_graph_add_edge(&g, p_ref_i_w_out, p_le_w_lhs);
+    arc_graph_add_edge(&g, p_ref_n_w_out, p_le_w_rhs);
+
+    /* WHILE node */
+    ArcNodeId n_while = arc_graph_add_node(&g, ARC_NODE_WHILE, r_body, 6018);
+    ArcPortId p_while_cond = arc_graph_add_port(&g, n_while, ARC_PORT_INPUT, "cond");
+    g.nodes[n_while].attr.loop.body_region = r_loop;
+    arc_graph_add_edge(&g, p_le_w_out, p_while_cond);
+
+    /* Loop body: acc = acc + i */
+    ArcNodeId n_ref_acc_lb = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_loop, 6020);
+    g.nodes[n_ref_acc_lb].attr.name = "acc";
+    ArcPortId p_ref_acc_lb_out = arc_graph_add_port(&g, n_ref_acc_lb, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ref_i2_lb = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_loop, 6021);
+    g.nodes[n_ref_i2_lb].attr.name = "i";
+    ArcPortId p_ref_i2_lb_out = arc_graph_add_port(&g, n_ref_i2_lb, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_add_lb = arc_graph_add_node(&g, ARC_NODE_ADD, r_loop, 6022);
+    ArcPortId p_add_lb_lhs = arc_graph_add_port(&g, n_add_lb, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_add_lb_rhs = arc_graph_add_port(&g, n_add_lb, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_add_lb_out = arc_graph_add_port(&g, n_add_lb, ARC_PORT_OUTPUT, "out");
+    ArcPortId add_lb_order[] = { p_add_lb_lhs, p_add_lb_rhs, p_add_lb_out };
+    arc_node_set_cyclic_order(&g, n_add_lb, add_lb_order, 3);
+    arc_graph_add_edge(&g, p_ref_acc_lb_out, p_add_lb_lhs);
+    arc_graph_add_edge(&g, p_ref_i2_lb_out, p_add_lb_rhs);
+
+    ArcNodeId n_assign_acc = arc_graph_add_node(&g, ARC_NODE_ASSIGN, r_loop, 6023);
+    g.nodes[n_assign_acc].attr.name = "acc";
+    ArcPortId p_assign_acc_val = arc_graph_add_port(&g, n_assign_acc, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_add_lb_out, p_assign_acc_val);
+
+    /* Loop body: i = i + 1 */
+    ArcNodeId n_ref_i3_lb = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_loop, 6024);
+    g.nodes[n_ref_i3_lb].attr.name = "i";
+    ArcPortId p_ref_i3_lb_out = arc_graph_add_port(&g, n_ref_i3_lb, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_one_lb = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r_loop, 6025);
+    g.nodes[n_one_lb].attr.int_value = 1;
+    ArcPortId p_one_lb_out = arc_graph_add_port(&g, n_one_lb, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_add2_lb = arc_graph_add_node(&g, ARC_NODE_ADD, r_loop, 6026);
+    ArcPortId p_add2_lb_lhs = arc_graph_add_port(&g, n_add2_lb, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_add2_lb_rhs = arc_graph_add_port(&g, n_add2_lb, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_add2_lb_out = arc_graph_add_port(&g, n_add2_lb, ARC_PORT_OUTPUT, "out");
+    ArcPortId add2_lb_order[] = { p_add2_lb_lhs, p_add2_lb_rhs, p_add2_lb_out };
+    arc_node_set_cyclic_order(&g, n_add2_lb, add2_lb_order, 3);
+    arc_graph_add_edge(&g, p_ref_i3_lb_out, p_add2_lb_lhs);
+    arc_graph_add_edge(&g, p_one_lb_out, p_add2_lb_rhs);
+
+    ArcNodeId n_assign_i = arc_graph_add_node(&g, ARC_NODE_ASSIGN, r_loop, 6027);
+    g.nodes[n_assign_i].attr.name = "i";
+    ArcPortId p_assign_i_val = arc_graph_add_port(&g, n_assign_i, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_add2_lb_out, p_assign_i_val);
+
+    /* RETURN acc */
+    ArcNodeId n_ref_acc2 = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 6030);
+    g.nodes[n_ref_acc2].attr.name = "acc";
+    ArcPortId p_ref_acc2_out = arc_graph_add_port(&g, n_ref_acc2, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ret = arc_graph_add_node(&g, ARC_NODE_RETURN, r_body, 6031);
+    ArcPortId p_ret_val = arc_graph_add_port(&g, n_ret, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_ref_acc2_out, p_ret_val);
+
+    /* Root: sum_to(10) -> output */
+    ArcNodeId n_10 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 6040);
+    g.nodes[n_10].attr.int_value = 10;
+    ArcPortId p_10_out = arc_graph_add_port(&g, n_10, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_call = arc_graph_add_node(&g, ARC_NODE_FUNC_CALL, r0, 6041);
+    g.nodes[n_call].attr.name = "sum_to";
+    ArcPortId p_call_arg = arc_graph_add_port(&g, n_call, ARC_PORT_INPUT, "arg0");
+    ArcPortId p_call_out = arc_graph_add_port(&g, n_call, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_10_out, p_call_arg);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 6042);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_call_out, p_out_in);
+
+    /* Compile + verify + run */
+    ArcCompileResult cr = arc_compile(&g);
+    if (!cr.success) {
+        for (int i = 0; i < cr.error_count; i++)
+            printf("    compile: %s\n", cr.errors[i].message);
+    }
+    ASSERT(cr.success);
+
+    ArcVerifyResult vr = arc_verify(&cr.image);
+    ASSERT(vr.valid);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ArcStatus s = arc_vm_run(&vm);
+    fclose(vm.output);
+    ASSERT(s == ARC_OK);
+
+    /* sum(1..10) = 55 */
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 55);
+
+    /* Verify debug table has entries */
+    ASSERT(cr.image.debug.count > 0);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Edge cases: malformed binary, stack overflow, clock intrinsic
+ * ================================================================ */
+
+TEST(test_malformed_binary) {
+    uint8_t garbage[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0x00, 0x01, 0x02, 0x03 };
+    ArcBytecodeImage img;
+    ArcStatus s = arc_image_read(garbage, sizeof(garbage), &img);
+    ASSERT(s == ARC_ERR_FORMAT);
+}
+
+TEST(test_truncated_binary) {
+    uint8_t trunc[] = { 'A', 'R', 'C', 'A', 0, 1 };
+    ArcBytecodeImage img;
+    ArcStatus s = arc_image_read(trunc, sizeof(trunc), &img);
+    ASSERT(s == ARC_ERR_FORMAT);
+}
+
+TEST(test_vm_stack_overflow) {
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    uint16_t c42 = arc_const_pool_add_i64(&img.constants, 42);
+    uint16_t name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    for (int i = 0; i < 1025; i++) {
+        arc_buf_push(&code, OP_CONST);
+        arc_buf_push_u16(&code, c42);
+    }
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = 0,
+                         .max_stack = 1025, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &img);
+    ArcStatus s = arc_vm_run(&vm);
+    ASSERT(s == ARC_ERR_RUNTIME);
+    ASSERT(strstr(vm.error.message, "stack overflow") != NULL);
+
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+TEST(test_clock_intrinsic) {
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+    uint16_t name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_INTRINSIC);
+    arc_buf_push_u16(&code, ARC_INTRINSIC_CLOCK);
+    arc_buf_push(&code, 0);
+    arc_buf_push(&code, 0);
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = 0,
+                         .max_stack = 1, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &img);
+    ArcStatus s = arc_vm_run(&vm);
+    ASSERT(s == ARC_OK);
+
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_F64);
+    ASSERT(result.as.f64 >= 0.0);
+
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+TEST(test_serialization_roundtrip_with_debug) {
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    uint16_t c5 = arc_const_pool_add_i64(&img.constants, 5);
+    uint16_t name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c5);
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = 0,
+                         .max_stack = 1, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    ArcDebugEntry de = { .func_idx = 0, .bc_start = 0, .bc_end = 3, .element_id = 42 };
+    arc_debug_table_add(&img.debug, de);
+
+    uint8_t* bytes; size_t blen;
+    ASSERT(arc_image_write(&img, &bytes, &blen) == ARC_OK);
+
+    ArcBytecodeImage img2;
+    ASSERT(arc_image_read(bytes, blen, &img2) == ARC_OK);
+    ASSERT(img2.debug.count == 1);
+    ASSERT(img2.debug.entries[0].func_idx == 0);
+    ASSERT(img2.debug.entries[0].bc_start == 0);
+    ASSERT(img2.debug.entries[0].bc_end == 3);
+    ASSERT(img2.debug.entries[0].element_id == 42);
+
+    ARC_FREE(bytes);
+    arc_image_free(&img2);
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+TEST(test_verifier_bad_jump_target) {
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+    uint16_t name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_JUMP);
+    arc_buf_push_i32(&code, 999);
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = 0,
+                         .max_stack = 0, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    ArcVerifyResult vr = arc_verify(&img);
+    ASSERT(!vr.valid);
+
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+TEST(test_const_pool_dedup) {
+    ArcConstPool pool;
+    arc_const_pool_init(&pool);
+
+    uint16_t a = arc_const_pool_add_i64(&pool, 42);
+    uint16_t b = arc_const_pool_add_i64(&pool, 42);
+    ASSERT(a == b);
+    ASSERT(pool.count == 1);
+
+    uint16_t c = arc_const_pool_add_string(&pool, "hello", 5);
+    uint16_t d = arc_const_pool_add_string(&pool, "hello", 5);
+    ASSERT(c == d);
+    ASSERT(pool.count == 2);
+
+    arc_const_pool_free(&pool);
+}
+
+/* ================================================================
  * Main
  * ================================================================ */
 
@@ -1054,6 +1388,18 @@ int main(void) {
 
     printf("\n[Milestone I: Recursion]\n");
     RUN(test_e2e_fibonacci);
+
+    printf("\n[Milestone J: While Loops]\n");
+    RUN(test_e2e_while_loop);
+
+    printf("\n[Edge Cases]\n");
+    RUN(test_malformed_binary);
+    RUN(test_truncated_binary);
+    RUN(test_vm_stack_overflow);
+    RUN(test_clock_intrinsic);
+    RUN(test_serialization_roundtrip_with_debug);
+    RUN(test_verifier_bad_jump_target);
+    RUN(test_const_pool_dedup);
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

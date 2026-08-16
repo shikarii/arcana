@@ -1,5 +1,6 @@
 #include "vm.h"
 #include <stdarg.h>
+#include <time.h>
 
 void arc_vm_init(ArcVm* vm, const ArcBytecodeImage* image) {
     memset(vm, 0, sizeof(*vm));
@@ -306,6 +307,11 @@ ArcStatus arc_vm_run(ArcVm* vm) {
                 }
                 fprintf(out, "\n");
                 vm->sp -= argc;
+                break;
+            }
+            case ARC_INTRINSIC_CLOCK: {
+                double t = (double)clock() / (double)CLOCKS_PER_SEC;
+                if (!vm_push(vm, arc_val_f64(t))) return ARC_ERR_RUNTIME;
                 break;
             }
             default:
