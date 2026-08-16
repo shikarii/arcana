@@ -80,6 +80,8 @@ void arc_func_table_init(ArcFuncTable* t) {
 }
 
 void arc_func_table_free(ArcFuncTable* t) {
+    for (uint16_t i = 0; i < t->count; i++)
+        ARC_FREE(t->funcs[i].upvalues);
     ARC_FREE(t->funcs); t->funcs = NULL; t->count = t->cap = 0;
 }
 
@@ -178,6 +180,11 @@ ArcStatus arc_image_write(const ArcBytecodeImage* img, uint8_t** out, size_t* ou
         write_u16(&b, f->max_stack);
         write_u32(&b, f->code_offset);
         write_u32(&b, f->code_length);
+        write_u8(&b, f->upvalue_count);
+        for (uint8_t u = 0; u < f->upvalue_count; u++) {
+            write_u8(&b, f->upvalues[u].is_local ? 1 : 0);
+            write_u16(&b, f->upvalues[u].index);
+        }
     }
 
     /* Code section: u32 length + bytes */
@@ -271,12 +278,23 @@ ArcStatus arc_image_read(const uint8_t* data, size_t len, ArcBytecodeImage* img)
     /* Functions */
     for (uint16_t i = 0; i < func_count; i++) {
         ArcFuncRecord fr;
+        memset(&fr, 0, sizeof(fr));
         if (!read_u16(&r, &fr.name_const_idx)) return ARC_ERR_FORMAT;
         if (!read_u8(&r, &fr.arity)) return ARC_ERR_FORMAT;
         if (!read_u16(&r, &fr.local_count)) return ARC_ERR_FORMAT;
         if (!read_u16(&r, &fr.max_stack)) return ARC_ERR_FORMAT;
         if (!read_u32(&r, &fr.code_offset)) return ARC_ERR_FORMAT;
         if (!read_u32(&r, &fr.code_length)) return ARC_ERR_FORMAT;
+        if (!read_u8(&r, &fr.upvalue_count)) return ARC_ERR_FORMAT;
+        if (fr.upvalue_count > 0) {
+            fr.upvalues = ARC_ALLOC(ArcUpvalueDesc, fr.upvalue_count);
+            for (uint8_t u = 0; u < fr.upvalue_count; u++) {
+                uint8_t is_local;
+                if (!read_u8(&r, &is_local)) return ARC_ERR_FORMAT;
+                fr.upvalues[u].is_local = (is_local != 0);
+                if (!read_u16(&r, &fr.upvalues[u].index)) return ARC_ERR_FORMAT;
+            }
+        }
         arc_func_table_add(&img->functions, fr);
     }
 

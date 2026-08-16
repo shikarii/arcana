@@ -4,9 +4,18 @@ void arc_gc_init(ArcGC* gc) {
     gc->objects = NULL;
     gc->bytes_allocated = 0;
     gc->next_gc = ARC_GC_INITIAL_THRESHOLD;
+    gc->stress_mode = false;
+    gc->alloc_count = 0;
+    gc->collect_count = 0;
+}
+
+void arc_gc_set_stress(ArcGC* gc, bool enabled) {
+    gc->stress_mode = enabled;
 }
 
 ArcObject* arc_gc_alloc(ArcGC* gc, size_t size, ArcObjType type) {
+    gc->alloc_count++;
+
     ArcObject* obj = (ArcObject*)calloc(1, size);
     if (!obj) return NULL;
     obj->type = type;
@@ -56,6 +65,12 @@ void arc_gc_mark_object(ArcObject* obj) {
         /* If still open, the stack slot is already a root */
         break;
     }
+    case OBJ_RECORD: {
+        ArcObjRecord* rec = (ArcObjRecord*)obj;
+        for (uint16_t i = 0; i < rec->field_count; i++)
+            arc_gc_mark_value(rec->fields[i]);
+        break;
+    }
     }
 }
 
@@ -89,6 +104,12 @@ static void free_object(ArcObject* obj) {
     }
     case OBJ_UPVALUE:
         break;
+    case OBJ_RECORD: {
+        ArcObjRecord* rec = (ArcObjRecord*)obj;
+        free(rec->fields);
+        free(rec->field_names);
+        break;
+    }
     }
     free(obj);
 }
@@ -128,6 +149,7 @@ void arc_gc_collect(ArcGC* gc,
 
     /* Sweep */
     sweep(gc);
+    gc->collect_count++;
 
     /* Adjust threshold */
     gc->next_gc = gc->bytes_allocated * ARC_GC_GROW_FACTOR;

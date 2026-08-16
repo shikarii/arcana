@@ -58,6 +58,12 @@ uint16_t arc_const_pool_add_i64(ArcConstPool* pool, int64_t v);
 uint16_t arc_const_pool_add_f64(ArcConstPool* pool, double v);
 uint16_t arc_const_pool_add_string(ArcConstPool* pool, const char* s, uint32_t len);
 
+/* --- Upvalue descriptor (for closures) --- */
+typedef struct {
+    bool     is_local;  /* true = captures a local in enclosing scope */
+    uint16_t index;     /* local slot (if is_local) or upvalue idx in enclosing func */
+} ArcUpvalueDesc;
+
 /* --- Function record --- */
 typedef struct {
     uint16_t name_const_idx;  /* index into constant pool for name string */
@@ -66,6 +72,8 @@ typedef struct {
     uint16_t max_stack;
     uint32_t code_offset;     /* byte offset into code section */
     uint32_t code_length;     /* byte count */
+    uint8_t  upvalue_count;   /* number of captured upvalues */
+    ArcUpvalueDesc* upvalues; /* array of upvalue descriptors (NULL if 0) */
 } ArcFuncRecord;
 
 /* --- Function table --- */

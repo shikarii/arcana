@@ -118,12 +118,20 @@ static bool is_expr_node(ArcNodeKind k) {
     switch (k) {
     case ARC_NODE_CONST_INT: case ARC_NODE_CONST_FLOAT:
     case ARC_NODE_CONST_BOOL: case ARC_NODE_CONST_NULL:
+    case ARC_NODE_CONST_STRING:
     case ARC_NODE_ADD: case ARC_NODE_SUB: case ARC_NODE_MUL:
     case ARC_NODE_DIV: case ARC_NODE_MOD: case ARC_NODE_NEG:
     case ARC_NODE_EQ: case ARC_NODE_NEQ: case ARC_NODE_LT:
     case ARC_NODE_LE: case ARC_NODE_GT: case ARC_NODE_GE:
+    case ARC_NODE_NOT: case ARC_NODE_AND: case ARC_NODE_OR:
+    case ARC_NODE_BIT_AND: case ARC_NODE_BIT_OR: case ARC_NODE_BIT_XOR:
+    case ARC_NODE_BIT_NOT: case ARC_NODE_SHL: case ARC_NODE_SHR:
+    case ARC_NODE_CAST_I64: case ARC_NODE_CAST_F64: case ARC_NODE_CAST_STR:
     case ARC_NODE_VAR_REF: case ARC_NODE_FUNC_CALL:
-    case ARC_NODE_NOT:
+    case ARC_NODE_ARRAY_LITERAL: case ARC_NODE_MAP_LITERAL:
+    case ARC_NODE_INDEX_GET: case ARC_NODE_STR_LEN: case ARC_NODE_STR_SLICE:
+    case ARC_NODE_STR_INDEX: case ARC_NODE_LENGTH:
+    case ARC_NODE_CLOSURE: case ARC_NODE_INTRINSIC_CALL:
         return true;
     default: return false;
     }
@@ -183,6 +191,16 @@ static void compile_binary(Compiler* c, ArcNodeId node_id, uint8_t op) {
     emit_op(c, op);
 }
 
+/* --- Compile a unary op node (single input port) --- */
+static void compile_unary(Compiler* c, ArcNodeId node_id, uint8_t op) {
+    ArcPortId in = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
+    if (in == ARC_INVALID_ID) in = find_port_by_role(c->graph, node_id, "in", ARC_PORT_INPUT);
+    ArcNodeId src = find_source_node(c->graph, in);
+    if (src == ARC_INVALID_ID) { cerr(c, "unary node %u has no input", node_id); return; }
+    compile_node(c, src);
+    emit_op(c, op);
+}
+
 static void compile_node(Compiler* c, ArcNodeId node_id) {
     if (node_id >= c->graph->node_count) {
         cerr(c, "invalid node id %u", node_id); return;
@@ -224,23 +242,205 @@ static void compile_node(Compiler* c, ArcNodeId node_id) {
     case ARC_NODE_GT:  compile_binary(c, node_id, OP_GT);  break;
     case ARC_NODE_GE:  compile_binary(c, node_id, OP_GE);  break;
 
-    case ARC_NODE_NEG: {
-        ArcPortId in = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
-        if (in == ARC_INVALID_ID) in = find_port_by_role(c->graph, node_id, "in", ARC_PORT_INPUT);
-        ArcNodeId src = find_source_node(c->graph, in);
-        if (src == ARC_INVALID_ID) { cerr(c, "neg node %u has no input", node_id); return; }
-        compile_node(c, src);
-        emit_op(c, OP_NEG);
+    case ARC_NODE_NEG: compile_unary(c, node_id, OP_NEG); break;
+    case ARC_NODE_NOT: compile_unary(c, node_id, OP_NOT); break;
+    case ARC_NODE_BIT_NOT: compile_unary(c, node_id, OP_BIT_NOT); break;
+    case ARC_NODE_CAST_I64: compile_unary(c, node_id, OP_CAST_I64); break;
+    case ARC_NODE_CAST_F64: compile_unary(c, node_id, OP_CAST_F64); break;
+    case ARC_NODE_CAST_STR: compile_unary(c, node_id, OP_CAST_STR); break;
+    case ARC_NODE_STR_LEN: compile_unary(c, node_id, OP_STR_LEN); break;
+    case ARC_NODE_LENGTH: compile_unary(c, node_id, OP_LENGTH); break;
+
+    case ARC_NODE_BIT_AND: compile_binary(c, node_id, OP_BIT_AND); break;
+    case ARC_NODE_BIT_OR:  compile_binary(c, node_id, OP_BIT_OR); break;
+    case ARC_NODE_BIT_XOR: compile_binary(c, node_id, OP_BIT_XOR); break;
+    case ARC_NODE_SHL:     compile_binary(c, node_id, OP_SHL); break;
+    case ARC_NODE_SHR:     compile_binary(c, node_id, OP_SHR); break;
+    case ARC_NODE_STR_INDEX: compile_binary(c, node_id, OP_STR_INDEX); break;
+
+    case ARC_NODE_CONST_STRING: {
+        uint16_t ci = arc_const_pool_add_string(&c->image.constants,
+            n->attr.string_value.data, n->attr.string_value.len);
+        emit_const(c, ci);
         break;
     }
 
-    case ARC_NODE_NOT: {
-        ArcPortId in = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
-        if (in == ARC_INVALID_ID) in = find_port_by_role(c->graph, node_id, "in", ARC_PORT_INPUT);
-        ArcNodeId src = find_source_node(c->graph, in);
-        if (src == ARC_INVALID_ID) { cerr(c, "not node %u has no input", node_id); return; }
-        compile_node(c, src);
-        emit_op(c, OP_NOT);
+    /* Short-circuit AND: lhs && rhs → compile lhs, dup, jump_if_false skip, pop, compile rhs */
+    case ARC_NODE_AND: {
+        ArcPortId lhs_port = find_port_by_role(c->graph, node_id, "lhs", ARC_PORT_INPUT);
+        ArcPortId rhs_port = find_port_by_role(c->graph, node_id, "rhs", ARC_PORT_INPUT);
+        ArcNodeId lhs_src = find_source_node(c->graph, lhs_port);
+        ArcNodeId rhs_src = find_source_node(c->graph, rhs_port);
+        if (lhs_src == ARC_INVALID_ID || rhs_src == ARC_INVALID_ID) {
+            cerr(c, "AND node %u has disconnected inputs", node_id); return;
+        }
+        compile_node(c, lhs_src);
+        emit_op(c, OP_DUP);
+        uint32_t skip = emit_jump(c, OP_JUMP_IF_FALSE);
+        emit_op(c, OP_POP);
+        compile_node(c, rhs_src);
+        patch_jump(c, skip);
+        break;
+    }
+
+    /* Short-circuit OR: lhs || rhs → compile lhs, dup, jump_if_true skip, pop, compile rhs */
+    case ARC_NODE_OR: {
+        ArcPortId lhs_port = find_port_by_role(c->graph, node_id, "lhs", ARC_PORT_INPUT);
+        ArcPortId rhs_port = find_port_by_role(c->graph, node_id, "rhs", ARC_PORT_INPUT);
+        ArcNodeId lhs_src = find_source_node(c->graph, lhs_port);
+        ArcNodeId rhs_src = find_source_node(c->graph, rhs_port);
+        if (lhs_src == ARC_INVALID_ID || rhs_src == ARC_INVALID_ID) {
+            cerr(c, "OR node %u has disconnected inputs", node_id); return;
+        }
+        compile_node(c, lhs_src);
+        emit_op(c, OP_DUP);
+        uint32_t skip = emit_jump(c, OP_JUMP_IF_TRUE);
+        emit_op(c, OP_POP);
+        compile_node(c, rhs_src);
+        patch_jump(c, skip);
+        break;
+    }
+
+    case ARC_NODE_ARRAY_LITERAL: {
+        /* Compile each element in order via input ports */
+        uint16_t count = 0;
+        for (uint32_t i = 0; i < n->port_count; i++) {
+            ArcPort* p = arc_graph_port((ArcGraph*)c->graph, n->ports[i]);
+            if (p && p->dir == ARC_PORT_INPUT) {
+                ArcNodeId src = find_source_node(c->graph, p->id);
+                if (src != ARC_INVALID_ID) { compile_node(c, src); count++; }
+            }
+        }
+        emit_byte(c, OP_ARRAY_NEW);
+        emit_u16(c, count);
+        c->stack_depth -= count;
+        c->stack_depth += 1;
+        if (c->stack_depth > c->max_stack) c->max_stack = c->stack_depth;
+        break;
+    }
+
+    case ARC_NODE_MAP_LITERAL: {
+        /* Compile key-value pairs via input ports (key0, val0, key1, val1, ...) */
+        uint16_t pair_count = 0;
+        for (uint32_t i = 0; i < n->port_count; i++) {
+            ArcPort* p = arc_graph_port((ArcGraph*)c->graph, n->ports[i]);
+            if (p && p->dir == ARC_PORT_INPUT) {
+                ArcNodeId src = find_source_node(c->graph, p->id);
+                if (src != ARC_INVALID_ID) compile_node(c, src);
+            }
+        }
+        pair_count = n->attr.collection.count;
+        emit_byte(c, OP_MAP_NEW);
+        emit_u16(c, pair_count);
+        c->stack_depth -= (pair_count * 2);
+        c->stack_depth += 1;
+        if (c->stack_depth > c->max_stack) c->max_stack = c->stack_depth;
+        break;
+    }
+
+    case ARC_NODE_INDEX_GET: {
+        /* container[key] → compile container, compile key, emit INDEX_GET */
+        compile_binary(c, node_id, OP_INDEX_GET);
+        break;
+    }
+
+    case ARC_NODE_INDEX_SET: {
+        /* container[key] = value → compile container, key, value, emit INDEX_SET */
+        ArcPortId cont_port = find_port_by_role(c->graph, node_id, "container", ARC_PORT_INPUT);
+        ArcPortId key_port = find_port_by_role(c->graph, node_id, "key", ARC_PORT_INPUT);
+        ArcPortId val_port = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
+        ArcNodeId cont_src = find_source_node(c->graph, cont_port);
+        ArcNodeId key_src = find_source_node(c->graph, key_port);
+        ArcNodeId val_src = find_source_node(c->graph, val_port);
+        if (cont_src != ARC_INVALID_ID) compile_node(c, cont_src);
+        if (key_src != ARC_INVALID_ID) compile_node(c, key_src);
+        if (val_src != ARC_INVALID_ID) compile_node(c, val_src);
+        emit_op(c, OP_INDEX_SET);
+        break;
+    }
+
+    case ARC_NODE_STR_SLICE: {
+        /* str_slice(str, start, end) → compile str, start, end, emit STR_SLICE */
+        ArcPortId str_port = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
+        ArcPortId start_port = find_port_by_role(c->graph, node_id, "start", ARC_PORT_INPUT);
+        ArcPortId end_port = find_port_by_role(c->graph, node_id, "end", ARC_PORT_INPUT);
+        ArcNodeId str_src = find_source_node(c->graph, str_port);
+        ArcNodeId start_src = find_source_node(c->graph, start_port);
+        ArcNodeId end_src = find_source_node(c->graph, end_port);
+        if (str_src != ARC_INVALID_ID) compile_node(c, str_src);
+        if (start_src != ARC_INVALID_ID) compile_node(c, start_src);
+        if (end_src != ARC_INVALID_ID) compile_node(c, end_src);
+        emit_op(c, OP_STR_SLICE);
+        break;
+    }
+
+    case ARC_NODE_TRY: {
+        /* try { ... } catch { ... } */
+        uint32_t try_begin = emit_jump(c, OP_TRY_BEGIN);
+        compile_region_stmts(c, n->attr.try_catch.try_region);
+        emit_op(c, OP_TRY_END);
+        uint32_t end_jump = emit_jump(c, OP_JUMP);
+        patch_jump(c, try_begin);
+        /* Catch block: thrown value is on stack */
+        compile_region_stmts(c, n->attr.try_catch.catch_region);
+        patch_jump(c, end_jump);
+        break;
+    }
+
+    case ARC_NODE_THROW: {
+        compile_unary(c, node_id, OP_THROW);
+        break;
+    }
+
+    case ARC_NODE_CLOSURE: {
+        /* Find the associated function and emit OP_CLOSURE */
+        ArcPortId func_port = find_port_by_role(c->graph, node_id, "func", ARC_PORT_INPUT);
+        if (func_port == ARC_INVALID_ID) {
+            cerr(c, "closure node %u has no func input", node_id); return;
+        }
+        ArcNodeId func_src = find_source_node(c->graph, func_port);
+        if (func_src == ARC_INVALID_ID) {
+            cerr(c, "closure node %u has disconnected func input", node_id); return;
+        }
+        /* Find function index by name */
+        const ArcNode* fn = &c->graph->nodes[func_src];
+        uint16_t func_idx = UINT16_MAX;
+        for (uint16_t fi = 0; fi < c->image.functions.count; fi++) {
+            uint16_t ni = c->image.functions.funcs[fi].name_const_idx;
+            if (ni < c->image.constants.count &&
+                c->image.constants.entries[ni].tag == ARC_CONST_STRING &&
+                strcmp(c->image.constants.entries[ni].as.str.data, fn->attr.func.name) == 0) {
+                func_idx = fi;
+                break;
+            }
+        }
+        if (func_idx == UINT16_MAX) {
+            cerr(c, "closure: undefined function '%s'", fn->attr.func.name); return;
+        }
+        emit_byte(c, OP_CLOSURE);
+        emit_u16(c, func_idx);
+        c->stack_depth += 1;
+        if (c->stack_depth > c->max_stack) c->max_stack = c->stack_depth;
+        break;
+    }
+
+    case ARC_NODE_INTRINSIC_CALL: {
+        /* Compile arguments, then emit OP_INTRINSIC */
+        uint8_t argc = 0;
+        for (uint32_t i = 0; i < n->port_count; i++) {
+            ArcPort* p = arc_graph_port((ArcGraph*)c->graph, n->ports[i]);
+            if (p && p->dir == ARC_PORT_INPUT) {
+                ArcNodeId src = find_source_node(c->graph, p->id);
+                if (src != ARC_INVALID_ID) { compile_node(c, src); argc++; }
+            }
+        }
+        emit_byte(c, OP_INTRINSIC);
+        emit_u16(c, n->attr.intrinsic.id);
+        emit_byte(c, argc);
+        emit_byte(c, 0); /* padding */
+        c->stack_depth -= argc;
+        c->stack_depth += 1; /* intrinsics push a result */
+        if (c->stack_depth > c->max_stack) c->max_stack = c->stack_depth;
         break;
     }
 

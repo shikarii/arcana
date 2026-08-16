@@ -13,6 +13,7 @@ typedef enum {
     OBJ_MAP,
     OBJ_CLOSURE,
     OBJ_UPVALUE,
+    OBJ_RECORD,
 } ArcObjType;
 
 /* --- Common object header --- */
@@ -59,6 +60,15 @@ typedef struct {
     uint8_t         upvalue_count;
 } ArcObjClosure;
 
+typedef struct {
+    ArcObject  obj;
+    const char* type_name;    /* record type name (e.g. "Point") */
+    ArcValue*  fields;        /* field values array */
+    const char** field_names; /* field name array (parallel to fields) */
+    uint16_t   field_count;
+    uint16_t   field_cap;
+} ArcObjRecord;
+
 /* --- Type checking macros --- */
 #define ARC_IS_OBJ(val)      ((val).tag == VAL_OBJ)
 #define ARC_OBJ_TYPE(obj)    (((ArcObject*)(obj))->type)
@@ -66,6 +76,7 @@ typedef struct {
 #define ARC_IS_ARRAY(val)    (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_ARRAY)
 #define ARC_IS_MAP(val)      (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_MAP)
 #define ARC_IS_CLOSURE(val)  (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_CLOSURE)
+#define ARC_IS_RECORD(val)   (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_RECORD)
 
 /* --- Cast macros (from ArcValue) --- */
 #define ARC_AS_STRING(val)   ((ArcObjString*)((val).as.obj))
@@ -73,6 +84,7 @@ typedef struct {
 #define ARC_AS_MAP(val)      ((ArcObjMap*)((val).as.obj))
 #define ARC_AS_CLOSURE(val)  ((ArcObjClosure*)((val).as.obj))
 #define ARC_AS_UPVALUE(val)  ((ArcObjUpvalue*)((val).as.obj))
+#define ARC_AS_RECORD(val)   ((ArcObjRecord*)((val).as.obj))
 
 /* --- Object constructors (allocate via GC) --- */
 ArcObjString*  arc_obj_string_new(ArcGC* gc, const char* data, uint32_t len);
@@ -84,6 +96,9 @@ bool           arc_obj_map_set(ArcObjMap* map, ArcValue key, ArcValue val);
 bool           arc_obj_map_get(ArcObjMap* map, ArcValue key, ArcValue* out);
 ArcObjClosure* arc_obj_closure_new(ArcGC* gc, uint16_t func_idx, uint8_t upvalue_count);
 ArcObjUpvalue* arc_obj_upvalue_new(ArcGC* gc, ArcValue* slot);
+ArcObjRecord*  arc_obj_record_new(ArcGC* gc, const char* type_name, uint16_t field_count);
+bool           arc_obj_record_set(ArcObjRecord* rec, const char* field, ArcValue val);
+bool           arc_obj_record_get(ArcObjRecord* rec, const char* field, ArcValue* out);
 
 /* --- Object utilities --- */
 void        arc_obj_print(ArcObject* obj, FILE* out);

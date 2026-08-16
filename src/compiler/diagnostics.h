@@ -47,6 +47,10 @@ typedef enum {
     ARC_DIAG_SEM_0003           = 2003,  /* arity mismatch */
     ARC_DIAG_SEM_0004           = 2004,  /* unsupported node kind */
 
+    /* ARC-TYPE-00xx: type checking */
+    ARC_DIAG_TYPE_0001          = 3001,  /* type mismatch */
+    ARC_DIAG_TYPE_0002          = 3002,  /* type warning */
+
     /* ARC-CODE-00xx: code generation */
     ARC_DIAG_CODE_0001          = 4001,  /* bytecode emission failure */
 
@@ -121,6 +125,8 @@ static inline const char* arc_diag_code_str(ArcDiagCode code) {
         snprintf(buf, sizeof(buf), "ARC-GRAPH-%04d", code - 1000);
     else if (code >= 2001 && code <= 2999)
         snprintf(buf, sizeof(buf), "ARC-SEM-%04d", code - 2000);
+    else if (code >= 3001 && code <= 3999)
+        snprintf(buf, sizeof(buf), "ARC-TYPE-%04d", code - 3000);
     else if (code >= 4001 && code <= 4999)
         snprintf(buf, sizeof(buf), "ARC-CODE-%04d", code - 4000);
     else if (code >= 5001 && code <= 5999)

@@ -11,11 +11,17 @@ struct ArcGC {
     ArcObject*  objects;            /* head of all allocated objects */
     size_t      bytes_allocated;
     size_t      next_gc;            /* trigger threshold */
+    bool        stress_mode;        /* if true, collect on every allocation */
+    uint32_t    alloc_count;        /* total allocations since init */
+    uint32_t    collect_count;      /* total collections since init */
 };
 
 /* Initialize / tear down */
 void arc_gc_init(ArcGC* gc);
 void arc_gc_free_all(ArcGC* gc);
+
+/* Enable/disable stress mode (GC on every allocation) */
+void arc_gc_set_stress(ArcGC* gc, bool enabled);
 
 /* Allocate an object (adds to object chain) */
 ArcObject* arc_gc_alloc(ArcGC* gc, size_t size, ArcObjType type);
