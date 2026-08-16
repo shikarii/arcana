@@ -172,9 +172,6 @@ static HirExprKind node_kind_to_binary_expr(ArcNodeKind k) {
     }
 }
 
-static bool is_binary_node(ArcNodeKind k) {
-    return k >= ARC_NODE_ADD && k <= ARC_NODE_GE;
-}
 
 /* ===================================================================
  * Forward declarations for mutually recursive lowering functions.

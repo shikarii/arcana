@@ -375,20 +375,20 @@ static void parse_line(ParseState* s, const char* line) {
         line = read_token(line, to_spec, sizeof(to_spec));
 
         /* Parse node.role */
-        char from_node[32], from_role[32], to_node[32], to_role[32];
+        char from_node[64], from_role[64], to_node[64], to_role[64];
         char* dot;
 
         dot = strchr(from_spec, '.');
         if (!dot) { perr(s, "edge from missing '.'"); return; }
         *dot = '\0';
-        snprintf(from_node, 32, "%s", from_spec);
-        snprintf(from_role, 32, "%s", dot + 1);
+        snprintf(from_node, sizeof(from_node), "%s", from_spec);
+        snprintf(from_role, sizeof(from_role), "%s", dot + 1);
 
         dot = strchr(to_spec, '.');
         if (!dot) { perr(s, "edge to missing '.'"); return; }
         *dot = '\0';
-        snprintf(to_node, 32, "%s", to_spec);
-        snprintf(to_role, 32, "%s", dot + 1);
+        snprintf(to_node, sizeof(to_node), "%s", to_spec);
+        snprintf(to_role, sizeof(to_role), "%s", dot + 1);
 
         ArcPortId from_port = find_port(s, from_node, from_role);
         ArcPortId to_port = find_port(s, to_node, to_role);
