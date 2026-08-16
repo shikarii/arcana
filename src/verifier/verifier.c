@@ -13,6 +13,9 @@ static void verr(ArcVerifyResult* r, uint16_t fi, uint32_t off, const char* fmt,
     r->valid = false;
 }
 
+/* Stack height map for control-flow join checking */
+#define MAX_CODE_LEN 65536
+
 ArcVerifyResult arc_verify(const ArcBytecodeImage* img) {
     ArcVerifyResult result = { .valid = true, .error_count = 0 };
 
@@ -30,6 +33,14 @@ ArcVerifyResult arc_verify(const ArcBytecodeImage* img) {
             continue;
         }
 
+        /* Stack height at each bytecode offset (for join checking) */
+        /* -2 = unvisited, >=0 = known stack height */
+        int16_t* height_at = NULL;
+        if (fn->code_length > 0 && fn->code_length <= MAX_CODE_LEN) {
+            height_at = (int16_t*)calloc(fn->code_length, sizeof(int16_t));
+            for (uint32_t i = 0; i < fn->code_length; i++) height_at[i] = -2;
+        }
+
         /* Walk instructions and simulate stack height */
         uint32_t ip = fn->code_offset;
         uint32_t end = fn->code_offset + fn->code_length;
@@ -39,6 +50,20 @@ ArcVerifyResult arc_verify(const ArcBytecodeImage* img) {
 
         while (ip < end) {
             uint32_t instr_start = ip;
+            uint32_t rel_ip = ip - fn->code_offset;
+
+            /* Check stack consistency at join points */
+            if (height_at && rel_ip < fn->code_length) {
+                if (height_at[rel_ip] == -2) {
+                    height_at[rel_ip] = (int16_t)stack_height;
+                } else if (height_at[rel_ip] != stack_height) {
+                    verr(&result, fi, instr_start,
+                         "stack height mismatch at join: expected %d, got %d",
+                         height_at[rel_ip], stack_height);
+                    stack_height = height_at[rel_ip]; /* continue with recorded height */
+                }
+            }
+
             uint8_t op = img->code[ip++];
             int op_bytes = arc_op_operand_bytes(op);
 
@@ -111,11 +136,42 @@ ArcVerifyResult arc_verify(const ArcBytecodeImage* img) {
 
             if (op == OP_HALT || op == OP_RETURN) has_halt_or_return = true;
 
+            /* Record expected stack height at jump targets */
+            if (height_at) {
+                int post_height = stack_height;
+                if (op == OP_JUMP || op == OP_JUMP_IF_FALSE || op == OP_JUMP_IF_TRUE) {
+                    int32_t offset = arc_read_i32(img->code + ip);
+                    uint32_t target = (uint32_t)((int32_t)(ip + 4) + offset);
+                    if (target >= fn->code_offset && target < end) {
+                        uint32_t rel_target = target - fn->code_offset;
+                        if (height_at[rel_target] == -2) {
+                            height_at[rel_target] = (int16_t)post_height;
+                        } else if (height_at[rel_target] != post_height) {
+                            verr(&result, fi, instr_start,
+                                 "stack height mismatch at jump target %u: expected %d, got %d",
+                                 target, height_at[rel_target], post_height);
+                        }
+                    }
+                }
+
+                /* After unconditional JUMP/HALT/RETURN, next instruction is
+                   only reachable via a jump target — pick up recorded height */
+                if (op == OP_JUMP || op == OP_HALT || op == OP_RETURN) {
+                    uint32_t next_rel = (ip + (uint32_t)op_bytes) - fn->code_offset;
+                    if (next_rel < fn->code_length && height_at[next_rel] != -2)
+                        stack_height = height_at[next_rel];
+                    else if (next_rel < fn->code_length)
+                        stack_height = 0; /* unreachable unless targeted by a jump */
+                }
+            }
+
             ip += (uint32_t)op_bytes;
         }
 
         if (!has_halt_or_return)
             verr(&result, fi, fn->code_offset, "function has no halt or return");
+
+        free(height_at);
     }
 
     return result;

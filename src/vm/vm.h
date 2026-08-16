@@ -5,8 +5,9 @@
 #include "../bytecode/format.h"
 #include "../bytecode/opcodes.h"
 
-#define ARC_STACK_MAX  1024
-#define ARC_FRAMES_MAX 256
+#define ARC_STACK_MAX   1024
+#define ARC_FRAMES_MAX  256
+#define ARC_GLOBALS_MAX 256
 
 /* Call frame */
 typedef struct {
@@ -34,6 +35,10 @@ typedef struct {
     /* Call frames */
     ArcFrame  frames[ARC_FRAMES_MAX];
     uint32_t  fp;       /* frame pointer (count of active frames) */
+
+    /* Globals */
+    ArcValue  globals[ARC_GLOBALS_MAX];
+    uint16_t  global_count;
 
     /* Instruction pointer (byte offset into image->code) */
     uint32_t  ip;

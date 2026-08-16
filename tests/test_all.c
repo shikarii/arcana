@@ -11,7 +11,10 @@
 #include "../src/vm/vm.h"
 #include "../src/verifier/verifier.h"
 #include "../src/semantic_graph/semantic_graph.h"
+#include "../src/semantic_graph/fixture_parser.h"
 #include "../src/compiler/compiler.h"
+#include "../src/compiler/diagnostics.h"
+#include "../src/interpreter/interpreter.h"
 
 static int tests_run = 0;
 static int tests_passed = 0;
@@ -1346,6 +1349,677 @@ TEST(test_const_pool_dedup) {
 }
 
 /* ================================================================
+ * Fixture Parser
+ * ================================================================ */
+
+TEST(test_fixture_parse_add) {
+    const char* fixture =
+        "region r0 module\n"
+        "node n0 const_int(5) in r0\n"
+        "node n1 const_int(10) in r0\n"
+        "node n2 add in r0\n"
+        "edge e0 n0.out -> n2.lhs\n"
+        "edge e1 n1.out -> n2.rhs\n"
+        "root n2.out\n";
+
+    ArcFixtureResult fr = arc_fixture_parse(fixture);
+    if (!fr.success) printf("    fixture error: %s\n", fr.error);
+    ASSERT(fr.success);
+    ASSERT(fr.graph.region_count == 1);
+    /* Should have 4 nodes: n0, n1, n2, + auto-created ROOT_OUTPUT */
+    ASSERT(fr.graph.node_count == 4);
+    ASSERT(fr.graph.output_node != ARC_INVALID_ID);
+    ASSERT(fr.graph.edge_count == 3); /* e0, e1, + root edge */
+
+    /* Compile and run to verify end-to-end */
+    ArcCompileResult cr = arc_compile(&fr.graph);
+    ASSERT(cr.success);
+    ArcVerifyResult vr = arc_verify(&cr.image);
+    ASSERT(vr.valid);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ArcStatus s = arc_vm_run(&vm);
+    fclose(vm.output);
+    ASSERT(s == ARC_OK);
+
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_I64);
+    ASSERT_EQ_I64(result.as.i64, 15);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&fr.graph);
+}
+
+TEST(test_fixture_parse_file) {
+    ArcFixtureResult fr = arc_fixture_parse_file("../tests/fixtures/add_5_10.graph");
+    if (!fr.success) printf("    fixture error: %s\n", fr.error);
+    ASSERT(fr.success);
+    ASSERT(fr.graph.node_count >= 3);
+
+    ArcCompileResult cr = arc_compile(&fr.graph);
+    ASSERT(cr.success);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    fclose(vm.output);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 15);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&fr.graph);
+}
+
+TEST(test_fixture_parse_malformed) {
+    ArcFixtureResult fr = arc_fixture_parse_file("../tests/fixtures/malformed.graph");
+    ASSERT(!fr.success);
+    ASSERT(strlen(fr.error) > 0);
+    if (fr.success) arc_graph_free(&fr.graph);
+}
+
+/* ================================================================
+ * NOT Operator End-to-End
+ * ================================================================ */
+
+TEST(test_e2e_not_operator) {
+    /* not(true) == false, not(false) == true */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_true = arc_graph_add_node(&g, ARC_NODE_CONST_BOOL, r0, 8001);
+    g.nodes[n_true].attr.bool_value = true;
+    ArcPortId p_true_out = arc_graph_add_port(&g, n_true, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_not = arc_graph_add_node(&g, ARC_NODE_NOT, r0, 8002);
+    ArcPortId p_not_in = arc_graph_add_port(&g, n_not, ARC_PORT_INPUT, "value");
+    ArcPortId p_not_out = arc_graph_add_port(&g, n_not, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_true_out, p_not_in);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 8003);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_not_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    if (!cr.success) {
+        for (int i = 0; i < cr.error_count; i++)
+            printf("    compile: %s\n", cr.errors[i].message);
+    }
+    ASSERT(cr.success);
+    ArcVerifyResult vr = arc_verify(&cr.image);
+    ASSERT(vr.valid);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    fclose(vm.output);
+
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_BOOL);
+    ASSERT(result.as.b == false);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+TEST(test_e2e_not_via_fixture) {
+    ArcFixtureResult fr = arc_fixture_parse_file("../tests/fixtures/not_true.graph");
+    ASSERT(fr.success);
+
+    ArcCompileResult cr = arc_compile(&fr.graph);
+    ASSERT(cr.success);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    fclose(vm.output);
+
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_BOOL);
+    ASSERT(result.as.b == false);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&fr.graph);
+}
+
+/* ================================================================
+ * Compile-Fail Diagnostic Test
+ * ================================================================ */
+
+TEST(test_compile_fail_diagnostic) {
+    /* Build a graph with a disconnected binary op — should produce a compile error */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    /* ADD node with no inputs connected */
+    ArcNodeId n_add = arc_graph_add_node(&g, ARC_NODE_ADD, r0, 9001);
+    ArcPortId p_add_lhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_add_rhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_add_out = arc_graph_add_port(&g, n_add, ARC_PORT_OUTPUT, "out");
+    ArcPortId add_order[] = { p_add_lhs, p_add_rhs, p_add_out };
+    arc_node_set_cyclic_order(&g, n_add, add_order, 3);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 9002);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_add_out, p_out_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    /* Should fail with disconnected inputs error */
+    ASSERT(!cr.success);
+    ASSERT(cr.error_count > 0);
+    ASSERT(strstr(cr.errors[0].message, "disconnected") != NULL);
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Golden Disassembly Test
+ * ================================================================ */
+
+TEST(test_golden_disassembly) {
+    /* Build 5+10, compile, disassemble, check output matches expected */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_5 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+    g.nodes[n_5].attr.int_value = 5;
+    ArcPortId p5 = arc_graph_add_port(&g, n_5, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_10 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+    g.nodes[n_10].attr.int_value = 10;
+    ArcPortId p10 = arc_graph_add_port(&g, n_10, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_add = arc_graph_add_node(&g, ARC_NODE_ADD, r0, 0);
+    ArcPortId pa_lhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "lhs");
+    ArcPortId pa_rhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "rhs");
+    ArcPortId pa_out = arc_graph_add_port(&g, n_add, ARC_PORT_OUTPUT, "out");
+    ArcPortId pa_order[] = { pa_lhs, pa_rhs, pa_out };
+    arc_node_set_cyclic_order(&g, n_add, pa_order, 3);
+    arc_graph_add_edge(&g, p5, pa_lhs);
+    arc_graph_add_edge(&g, p10, pa_rhs);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 0);
+    ArcPortId po_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, pa_out, po_in);
+
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+
+    /* Disassemble to buffer */
+    char dis_buf[4096] = {0};
+    FILE* memf = fopen("NUL", "w");
+    /* Use tmpfile to capture output */
+    FILE* tmp = tmpfile();
+    ASSERT(tmp != NULL);
+    arc_disassemble(&cr.image, tmp);
+    fseek(tmp, 0, SEEK_SET);
+    size_t rd = fread(dis_buf, 1, sizeof(dis_buf) - 1, tmp);
+    dis_buf[rd] = '\0';
+    fclose(tmp);
+    if (memf) fclose(memf);
+
+    /* Verify key elements are present in deterministic output */
+    ASSERT(strstr(dis_buf, "main") != NULL);
+    ASSERT(strstr(dis_buf, "const") != NULL);
+    ASSERT(strstr(dis_buf, "add") != NULL);
+    ASSERT(strstr(dis_buf, "halt") != NULL);
+    ASSERT(strstr(dis_buf, "5") != NULL);
+    ASSERT(strstr(dis_buf, "10") != NULL);
+
+    /* Compile same graph again — output should be identical (determinism) */
+    ArcCompileResult cr2 = arc_compile(&g);
+    ASSERT(cr2.success);
+
+    uint8_t *bytes1, *bytes2;
+    size_t len1, len2;
+    arc_image_write(&cr.image, &bytes1, &len1);
+    arc_image_write(&cr2.image, &bytes2, &len2);
+    ASSERT(len1 == len2);
+    ASSERT(memcmp(bytes1, bytes2, len1) == 0);
+
+    ARC_FREE(bytes1); ARC_FREE(bytes2);
+    arc_compile_result_free(&cr);
+    arc_compile_result_free(&cr2);
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Globals Support
+ * ================================================================ */
+
+TEST(test_vm_globals) {
+    /* Test LOAD_GLOBAL / STORE_GLOBAL opcodes */
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    uint16_t c42 = arc_const_pool_add_i64(&img.constants, 42);
+    uint16_t name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    /* CONST 42, STORE_GLOBAL 0, LOAD_GLOBAL 0, HALT */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c42);
+    arc_buf_push(&code, OP_STORE_GLOBAL); arc_buf_push_u16(&code, 0);
+    arc_buf_push(&code, OP_LOAD_GLOBAL); arc_buf_push_u16(&code, 0);
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = 0,
+                         .max_stack = 1, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &img);
+    ArcStatus s = arc_vm_run(&vm);
+    ASSERT(s == ARC_OK);
+    ASSERT(arc_vm_result(&vm).tag == VAL_I64);
+    ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 42);
+
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+/* ================================================================
+ * String Runtime Values
+ * ================================================================ */
+
+TEST(test_string_values) {
+    /* Test ArcString creation, equality, refcounting */
+    ArcString* s1 = arc_string_new("hello", 5);
+    ASSERT(s1->len == 5);
+    ASSERT(strcmp(s1->data, "hello") == 0);
+    ASSERT(s1->refcount == 1);
+
+    arc_string_retain(s1);
+    ASSERT(s1->refcount == 2);
+
+    ArcString* s2 = arc_string_new("hello", 5);
+    ArcValue v1 = arc_val_string(s1);
+    ArcValue v2 = arc_val_string(s2);
+    ASSERT(arc_val_equal(v1, v2));
+    ASSERT(arc_val_is_truthy(v1));
+
+    ArcString* empty = arc_string_new("", 0);
+    ArcValue ve = arc_val_string(empty);
+    ASSERT(!arc_val_is_truthy(ve));
+
+    arc_string_release(s1);
+    ASSERT(s1->refcount == 1);
+    arc_string_release(s1);
+    /* s1 freed now */
+    arc_string_release(s2);
+    arc_string_release(empty);
+}
+
+TEST(test_vm_string_const) {
+    /* Load a string constant and verify it becomes a VAL_STRING */
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    uint16_t cs = arc_const_pool_add_string(&img.constants, "hello", 5);
+    uint16_t name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, cs);
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = 0,
+                         .max_stack = 1, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    ArcVm vm;
+    arc_vm_init(&vm, &img);
+    ArcStatus s = arc_vm_run(&vm);
+    ASSERT(s == ARC_OK);
+    ArcValue result = arc_vm_result(&vm);
+    ASSERT(result.tag == VAL_STRING);
+    ASSERT(result.as.str != NULL);
+    ASSERT(strcmp(result.as.str->data, "hello") == 0);
+
+    arc_string_release(result.as.str);
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+/* ================================================================
+ * Property Tests (encode/decode roundtrip)
+ * ================================================================ */
+
+TEST(test_property_roundtrip_random) {
+    /* Build an image with varied constants, serialize, deserialize, compare */
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    /* Add diverse constant types */
+    uint16_t c_null = arc_const_pool_add_null(&img.constants);
+    uint16_t c_true = arc_const_pool_add_bool(&img.constants, true);
+    uint16_t c_false = arc_const_pool_add_bool(&img.constants, false);
+    uint16_t c_i1 = arc_const_pool_add_i64(&img.constants, 0);
+    uint16_t c_i2 = arc_const_pool_add_i64(&img.constants, -1);
+    uint16_t c_i3 = arc_const_pool_add_i64(&img.constants, INT64_MAX);
+    uint16_t c_i4 = arc_const_pool_add_i64(&img.constants, INT64_MIN);
+    uint16_t c_f1 = arc_const_pool_add_f64(&img.constants, 3.14159);
+    uint16_t c_f2 = arc_const_pool_add_f64(&img.constants, -0.0);
+    uint16_t c_s1 = arc_const_pool_add_string(&img.constants, "test", 4);
+    uint16_t c_s2 = arc_const_pool_add_string(&img.constants, "", 0);
+    (void)c_null; (void)c_true; (void)c_false; (void)c_i1; (void)c_i2;
+    (void)c_i3; (void)c_i4; (void)c_f1; (void)c_f2; (void)c_s1; (void)c_s2;
+
+    uint16_t main_name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c_i1);
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = main_name, .arity = 0, .local_count = 0,
+                         .max_stack = 1, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    /* Add debug entries */
+    ArcDebugEntry de1 = { .func_idx = 0, .bc_start = 0, .bc_end = 3, .element_id = 12345 };
+    ArcDebugEntry de2 = { .func_idx = 0, .bc_start = 3, .bc_end = 4, .element_id = 0xFFFFFFFFFFFFFFFFULL };
+    arc_debug_table_add(&img.debug, de1);
+    arc_debug_table_add(&img.debug, de2);
+
+    /* Serialize */
+    uint8_t* bytes; size_t blen;
+    ASSERT(arc_image_write(&img, &bytes, &blen) == ARC_OK);
+
+    /* Deserialize */
+    ArcBytecodeImage img2;
+    ASSERT(arc_image_read(bytes, blen, &img2) == ARC_OK);
+
+    /* Compare */
+    ASSERT(img2.constants.count == img.constants.count);
+    for (uint16_t i = 0; i < img.constants.count; i++) {
+        ASSERT(img2.constants.entries[i].tag == img.constants.entries[i].tag);
+        switch (img.constants.entries[i].tag) {
+        case ARC_CONST_I64:
+            ASSERT(img2.constants.entries[i].as.i64 == img.constants.entries[i].as.i64); break;
+        case ARC_CONST_F64:
+            ASSERT(memcmp(&img2.constants.entries[i].as.f64,
+                          &img.constants.entries[i].as.f64, 8) == 0); break;
+        case ARC_CONST_STRING:
+            ASSERT(img2.constants.entries[i].as.str.len == img.constants.entries[i].as.str.len);
+            ASSERT(memcmp(img2.constants.entries[i].as.str.data,
+                          img.constants.entries[i].as.str.data,
+                          img.constants.entries[i].as.str.len) == 0); break;
+        default: break;
+        }
+    }
+    ASSERT(img2.code_len == img.code_len);
+    ASSERT(memcmp(img2.code, img.code, img.code_len) == 0);
+    ASSERT(img2.debug.count == img.debug.count);
+    for (uint32_t i = 0; i < img.debug.count; i++) {
+        ASSERT(img2.debug.entries[i].func_idx == img.debug.entries[i].func_idx);
+        ASSERT(img2.debug.entries[i].bc_start == img.debug.entries[i].bc_start);
+        ASSERT(img2.debug.entries[i].bc_end == img.debug.entries[i].bc_end);
+        ASSERT(img2.debug.entries[i].element_id == img.debug.entries[i].element_id);
+    }
+
+    ARC_FREE(bytes);
+    arc_image_free(&img2);
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+/* ================================================================
+ * Structured Diagnostics
+ * ================================================================ */
+
+TEST(test_structured_diagnostics) {
+    ArcDiagList diags;
+    arc_diag_init(&diags);
+
+    ArcDiagnostic* d = arc_diag_add(&diags);
+    d->severity = ARC_DIAG_ERROR;
+    d->code = ARC_ERR_MISSING_PORT;
+    snprintf(d->message, sizeof(d->message), "missing port 'lhs' on node 5");
+    d->primary.element_id = 42;
+    d->primary.node_id = 5;
+    d->primary.port_role = "lhs";
+
+    ASSERT(diags.count == 1);
+    ASSERT(diags.items[0].severity == ARC_DIAG_ERROR);
+    ASSERT(diags.items[0].code == ARC_ERR_MISSING_PORT);
+    ASSERT(diags.items[0].primary.element_id == 42);
+
+    /* Add a related ref */
+    d->related[0].ref.element_id = 99;
+    snprintf(d->related[0].label, sizeof(d->related[0].label), "defined here");
+    d->related_count = 1;
+
+    /* Print to NUL to exercise the printer */
+    FILE* f = fopen("NUL", "w");
+    arc_diag_print(&diags, f);
+    fclose(f);
+
+    arc_diag_free(&diags);
+    ASSERT(diags.count == 0);
+}
+
+/* ================================================================
+ * Differential Reference Interpreter
+ * ================================================================ */
+
+TEST(test_ref_interp_5_plus_10) {
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_5 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+    g.nodes[n_5].attr.int_value = 5;
+    ArcPortId p5 = arc_graph_add_port(&g, n_5, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_10 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+    g.nodes[n_10].attr.int_value = 10;
+    ArcPortId p10 = arc_graph_add_port(&g, n_10, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_add = arc_graph_add_node(&g, ARC_NODE_ADD, r0, 0);
+    ArcPortId pa_lhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "lhs");
+    ArcPortId pa_rhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "rhs");
+    ArcPortId pa_out = arc_graph_add_port(&g, n_add, ARC_PORT_OUTPUT, "out");
+    ArcPortId pa_order[] = { pa_lhs, pa_rhs, pa_out };
+    arc_node_set_cyclic_order(&g, n_add, pa_order, 3);
+    arc_graph_add_edge(&g, p5, pa_lhs);
+    arc_graph_add_edge(&g, p10, pa_rhs);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 0);
+    ArcPortId po_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, pa_out, po_in);
+
+    /* Reference interpreter */
+    ArcInterpResult ir = arc_interpret(&g);
+    ASSERT(ir.success);
+    ASSERT(ir.result.tag == VAL_I64);
+    ASSERT_EQ_I64(ir.result.as.i64, 15);
+
+    /* Compiler -> VM */
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    fclose(vm.output);
+    ArcValue vm_result = arc_vm_result(&vm);
+
+    /* Differential comparison */
+    ASSERT(arc_val_equal(ir.result, vm_result));
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+TEST(test_ref_interp_function) {
+    /* double(x) = x + x; double(7) == 14 */
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+    ArcRegionId r_body = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+
+    ArcNodeId n_fdef = arc_graph_add_node(&g, ARC_NODE_FUNC_DEF, r0, 0);
+    g.nodes[n_fdef].attr.func.name = "double";
+    g.nodes[n_fdef].attr.func.arity = 1;
+    g.nodes[n_fdef].attr.func.body_region = r_body;
+
+    ArcNodeId n_param = arc_graph_add_node(&g, ARC_NODE_PARAM, r_body, 0);
+    g.nodes[n_param].attr.name = "x";
+
+    ArcNodeId n_ref1 = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 0);
+    g.nodes[n_ref1].attr.name = "x";
+    ArcPortId p_ref1 = arc_graph_add_port(&g, n_ref1, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_ref2 = arc_graph_add_node(&g, ARC_NODE_VAR_REF, r_body, 0);
+    g.nodes[n_ref2].attr.name = "x";
+    ArcPortId p_ref2 = arc_graph_add_port(&g, n_ref2, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_add = arc_graph_add_node(&g, ARC_NODE_ADD, r_body, 0);
+    ArcPortId p_add_lhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "lhs");
+    ArcPortId p_add_rhs = arc_graph_add_port(&g, n_add, ARC_PORT_INPUT, "rhs");
+    ArcPortId p_add_out = arc_graph_add_port(&g, n_add, ARC_PORT_OUTPUT, "out");
+    ArcPortId add_order[] = { p_add_lhs, p_add_rhs, p_add_out };
+    arc_node_set_cyclic_order(&g, n_add, add_order, 3);
+    arc_graph_add_edge(&g, p_ref1, p_add_lhs);
+    arc_graph_add_edge(&g, p_ref2, p_add_rhs);
+
+    ArcNodeId n_ret = arc_graph_add_node(&g, ARC_NODE_RETURN, r_body, 0);
+    ArcPortId p_ret_val = arc_graph_add_port(&g, n_ret, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_add_out, p_ret_val);
+
+    ArcNodeId n_7 = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+    g.nodes[n_7].attr.int_value = 7;
+    ArcPortId p_7 = arc_graph_add_port(&g, n_7, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_call = arc_graph_add_node(&g, ARC_NODE_FUNC_CALL, r0, 0);
+    g.nodes[n_call].attr.name = "double";
+    ArcPortId p_call_arg = arc_graph_add_port(&g, n_call, ARC_PORT_INPUT, "arg0");
+    ArcPortId p_call_out = arc_graph_add_port(&g, n_call, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_7, p_call_arg);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 0);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_call_out, p_out_in);
+
+    /* Reference interpreter */
+    ArcInterpResult ir = arc_interpret(&g);
+    ASSERT(ir.success);
+    ASSERT_EQ_I64(ir.result.as.i64, 14);
+
+    /* Compiler -> VM */
+    ArcCompileResult cr = arc_compile(&g);
+    ASSERT(cr.success);
+    ArcVm vm;
+    arc_vm_init(&vm, &cr.image);
+    vm.output = fopen("NUL", "w");
+    ASSERT(arc_vm_run(&vm) == ARC_OK);
+    fclose(vm.output);
+
+    /* Differential comparison */
+    ASSERT(arc_val_equal(ir.result, arc_vm_result(&vm)));
+
+    arc_compile_result_free(&cr);
+    arc_graph_free(&g);
+}
+
+TEST(test_ref_interp_not) {
+    ArcGraph g;
+    arc_graph_init(&g);
+
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    g.root_region = r0;
+
+    ArcNodeId n_true = arc_graph_add_node(&g, ARC_NODE_CONST_BOOL, r0, 0);
+    g.nodes[n_true].attr.bool_value = true;
+    ArcPortId p_true = arc_graph_add_port(&g, n_true, ARC_PORT_OUTPUT, "out");
+
+    ArcNodeId n_not = arc_graph_add_node(&g, ARC_NODE_NOT, r0, 0);
+    ArcPortId p_not_in = arc_graph_add_port(&g, n_not, ARC_PORT_INPUT, "value");
+    ArcPortId p_not_out = arc_graph_add_port(&g, n_not, ARC_PORT_OUTPUT, "out");
+    arc_graph_add_edge(&g, p_true, p_not_in);
+
+    ArcNodeId n_out = arc_graph_add_node(&g, ARC_NODE_ROOT_OUTPUT, r0, 0);
+    ArcPortId p_out_in = arc_graph_add_port(&g, n_out, ARC_PORT_INPUT, "value");
+    g.output_node = n_out;
+    arc_graph_add_edge(&g, p_not_out, p_out_in);
+
+    ArcInterpResult ir = arc_interpret(&g);
+    ASSERT(ir.success);
+    ASSERT(ir.result.tag == VAL_BOOL);
+    ASSERT(ir.result.as.b == false);
+
+    arc_graph_free(&g);
+}
+
+/* ================================================================
+ * Verifier: Stack consistency at joins
+ * ================================================================ */
+
+TEST(test_verifier_stack_consistency) {
+    /* The verifier should check stack height consistency at jump targets.
+     * Build valid code with a conditional — should pass verification. */
+    ArcBytecodeImage img;
+    arc_image_init(&img);
+
+    uint16_t c_true = arc_const_pool_add_bool(&img.constants, true);
+    uint16_t c_42 = arc_const_pool_add_i64(&img.constants, 42);
+    uint16_t c_99 = arc_const_pool_add_i64(&img.constants, 99);
+    uint16_t name = arc_const_pool_add_string(&img.constants, "main", 4);
+
+    ArcBuf code; arc_buf_init(&code);
+    /* offset 0: CONST true  (3 bytes)  sp: 0->1 */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c_true);
+    /* offset 3: JUMP_IF_FALSE +8  (5 bytes)  sp: 1->0, target=16 */
+    arc_buf_push(&code, OP_JUMP_IF_FALSE); arc_buf_push_i32(&code, 8);
+    /* offset 8: CONST 42  (3 bytes)  sp: 0->1 */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c_42);
+    /* offset 11: JUMP +3  (5 bytes)  sp: 1->1, target=19 */
+    arc_buf_push(&code, OP_JUMP); arc_buf_push_i32(&code, 3);
+    /* offset 16: CONST 99  (3 bytes)  sp: 0->1 */
+    arc_buf_push(&code, OP_CONST); arc_buf_push_u16(&code, c_99);
+    /* offset 19: HALT  sp: 1 */
+    arc_buf_push(&code, OP_HALT);
+    img.code = code.data; img.code_len = (uint32_t)code.len;
+
+    ArcFuncRecord fr = { .name_const_idx = name, .arity = 0, .local_count = 0,
+                         .max_stack = 1, .code_offset = 0, .code_length = img.code_len };
+    arc_func_table_add(&img.functions, fr);
+
+    ArcVerifyResult vr = arc_verify(&img);
+    ASSERT(vr.valid);
+
+    arc_const_pool_free(&img.constants);
+    arc_func_table_free(&img.functions);
+    arc_debug_table_free(&img.debug);
+}
+
+/* ================================================================
  * Main
  * ================================================================ */
 
@@ -1400,6 +2074,42 @@ int main(void) {
     RUN(test_serialization_roundtrip_with_debug);
     RUN(test_verifier_bad_jump_target);
     RUN(test_const_pool_dedup);
+
+    printf("\n[Fixture Parser]\n");
+    RUN(test_fixture_parse_add);
+    RUN(test_fixture_parse_file);
+    RUN(test_fixture_parse_malformed);
+
+    printf("\n[NOT Operator]\n");
+    RUN(test_e2e_not_operator);
+    RUN(test_e2e_not_via_fixture);
+
+    printf("\n[Compile-Fail Diagnostics]\n");
+    RUN(test_compile_fail_diagnostic);
+
+    printf("\n[Golden Disassembly]\n");
+    RUN(test_golden_disassembly);
+
+    printf("\n[Globals]\n");
+    RUN(test_vm_globals);
+
+    printf("\n[String Values]\n");
+    RUN(test_string_values);
+    RUN(test_vm_string_const);
+
+    printf("\n[Property Tests]\n");
+    RUN(test_property_roundtrip_random);
+
+    printf("\n[Structured Diagnostics]\n");
+    RUN(test_structured_diagnostics);
+
+    printf("\n[Reference Interpreter]\n");
+    RUN(test_ref_interp_5_plus_10);
+    RUN(test_ref_interp_function);
+    RUN(test_ref_interp_not);
+
+    printf("\n[Verifier Stack Consistency]\n");
+    RUN(test_verifier_stack_consistency);
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

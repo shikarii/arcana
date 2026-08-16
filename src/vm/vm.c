@@ -60,7 +60,10 @@ static ArcValue const_to_val(const ArcConstant* c) {
     case ARC_CONST_BOOL:   return arc_val_bool(c->as.b);
     case ARC_CONST_I64:    return arc_val_i64(c->as.i64);
     case ARC_CONST_F64:    return arc_val_f64(c->as.f64);
-    case ARC_CONST_STRING: return arc_val_null(); /* strings not yet runtime values */
+    case ARC_CONST_STRING: {
+        ArcString* s = arc_string_new(c->as.str.data, c->as.str.len);
+        return arc_val_string(s);
+    }
     }
     return arc_val_null();
 }
@@ -157,6 +160,31 @@ ArcStatus arc_vm_run(ArcVm* vm) {
             ArcValue v; if (!vm_pop(vm, &v)) return ARC_ERR_RUNTIME;
             uint32_t base = vm->frames[vm->fp - 1].base_slot;
             vm->stack[base + slot] = v;
+            break;
+        }
+
+        case OP_LOAD_GLOBAL: {
+            uint16_t idx = read_u16(vm);
+            if (idx >= vm->global_count) {
+                /* Auto-extend globals to cover this index */
+                while (vm->global_count <= idx && vm->global_count < ARC_GLOBALS_MAX)
+                    vm->globals[vm->global_count++] = arc_val_null();
+            }
+            if (idx >= ARC_GLOBALS_MAX) {
+                vm_error(vm, "global index %u out of bounds", idx); return ARC_ERR_RUNTIME;
+            }
+            if (!vm_push(vm, vm->globals[idx])) return ARC_ERR_RUNTIME;
+            break;
+        }
+
+        case OP_STORE_GLOBAL: {
+            uint16_t idx = read_u16(vm);
+            ArcValue v; if (!vm_pop(vm, &v)) return ARC_ERR_RUNTIME;
+            if (idx >= ARC_GLOBALS_MAX) {
+                vm_error(vm, "global index %u out of bounds", idx); return ARC_ERR_RUNTIME;
+            }
+            vm->globals[idx] = v;
+            if (idx >= vm->global_count) vm->global_count = idx + 1;
             break;
         }
 
