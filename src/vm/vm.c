@@ -327,10 +327,10 @@ ArcStatus arc_vm_run(ArcVm* vm) {
         case OP_CAST_I64: {
             ArcValue v; if (!vm_pop(vm, &v)) return ARC_ERR_RUNTIME;
             switch (v.tag) {
-            case VAL_I64: if (!vm_push(vm, v)) return ARC_ERR_RUNTIME; break;
-            case VAL_F64: if (!vm_push(vm, arc_val_i64((int64_t)v.as.f64))) return ARC_ERR_RUNTIME; break;
-            case VAL_BOOL: if (!vm_push(vm, arc_val_i64(v.as.b ? 1 : 0))) return ARC_ERR_RUNTIME; break;
-            case VAL_NULL: if (!vm_push(vm, arc_val_i64(0))) return ARC_ERR_RUNTIME; break;
+            case VAL_I64:  { if (!vm_push(vm, v)) return ARC_ERR_RUNTIME; break; }
+            case VAL_F64:  { if (!vm_push(vm, arc_val_i64((int64_t)v.as.f64))) return ARC_ERR_RUNTIME; break; }
+            case VAL_BOOL: { if (!vm_push(vm, arc_val_i64(v.as.b ? 1 : 0))) return ARC_ERR_RUNTIME; break; }
+            case VAL_NULL: { if (!vm_push(vm, arc_val_i64(0))) return ARC_ERR_RUNTIME; break; }
             case VAL_OBJ:
                 if (ARC_IS_STRING(v)) {
                     ArcObjString* s = ARC_AS_STRING(v);
@@ -345,10 +345,10 @@ ArcStatus arc_vm_run(ArcVm* vm) {
         case OP_CAST_F64: {
             ArcValue v; if (!vm_pop(vm, &v)) return ARC_ERR_RUNTIME;
             switch (v.tag) {
-            case VAL_F64: if (!vm_push(vm, v)) return ARC_ERR_RUNTIME; break;
-            case VAL_I64: if (!vm_push(vm, arc_val_f64((double)v.as.i64))) return ARC_ERR_RUNTIME; break;
-            case VAL_BOOL: if (!vm_push(vm, arc_val_f64(v.as.b ? 1.0 : 0.0))) return ARC_ERR_RUNTIME; break;
-            case VAL_NULL: if (!vm_push(vm, arc_val_f64(0.0))) return ARC_ERR_RUNTIME; break;
+            case VAL_F64:  { if (!vm_push(vm, v)) return ARC_ERR_RUNTIME; break; }
+            case VAL_I64:  { if (!vm_push(vm, arc_val_f64((double)v.as.i64))) return ARC_ERR_RUNTIME; break; }
+            case VAL_BOOL: { if (!vm_push(vm, arc_val_f64(v.as.b ? 1.0 : 0.0))) return ARC_ERR_RUNTIME; break; }
+            case VAL_NULL: { if (!vm_push(vm, arc_val_f64(0.0))) return ARC_ERR_RUNTIME; break; }
             case VAL_OBJ:
                 if (ARC_IS_STRING(v)) {
                     ArcObjString* s = ARC_AS_STRING(v);
@@ -701,22 +701,26 @@ ArcStatus arc_vm_run(ArcVm* vm) {
                 switch (v.tag) {
                 case VAL_NULL: {
                     ArcObjString* s = arc_obj_string_new(&vm->gc, "null", 4);
-                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME; break;
+                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
+                    break;
                 }
                 case VAL_BOOL: {
                     const char* t = v.as.b ? "true" : "false";
                     ArcObjString* s = arc_obj_string_new(&vm->gc, t, (uint32_t)strlen(t));
-                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME; break;
+                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
+                    break;
                 }
                 case VAL_I64: {
                     int n = snprintf(buf, sizeof(buf), "%lld", (long long)v.as.i64);
                     ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
-                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME; break;
+                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
+                    break;
                 }
                 case VAL_F64: {
                     int n = snprintf(buf, sizeof(buf), "%g", v.as.f64);
                     ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
-                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME; break;
+                    if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
+                    break;
                 }
                 case VAL_OBJ:
                     if (ARC_IS_STRING(v)) { if (!vm_push(vm, v)) return ARC_ERR_RUNTIME; }
