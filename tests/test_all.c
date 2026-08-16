@@ -20,6 +20,13 @@
 #include "../src/semantic/semantic.h"
 #include "../src/platform/platform.h"
 
+/* Portable null device path */
+#ifdef _WIN32
+#define DEV_NULL "NUL"
+#else
+#define DEV_NULL "/dev/null"
+#endif
+
 static int tests_run = 0;
 static int tests_passed = 0;
 static int tests_failed = 0;
@@ -703,7 +710,7 @@ TEST(test_e2e_function_call) {
 
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w"); /* suppress print output */
+    vm.output = fopen(DEV_NULL, "w"); /* suppress print output */
     ArcStatus s = arc_vm_run(&vm);
     fclose(vm.output);
     ASSERT(s == ARC_OK);
@@ -821,7 +828,7 @@ TEST(test_e2e_if_else) {
 
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ArcStatus s = arc_vm_run(&vm);
     fclose(vm.output);
     ASSERT(s == ARC_OK);
@@ -1004,7 +1011,7 @@ TEST(test_e2e_fibonacci) {
     /* Execute */
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ArcStatus s = arc_vm_run(&vm);
     fclose(vm.output);
     ASSERT(s == ARC_OK);
@@ -1179,7 +1186,7 @@ TEST(test_e2e_while_loop) {
 
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ArcStatus s = arc_vm_run(&vm);
     fclose(vm.output);
     ASSERT(s == ARC_OK);
@@ -1383,7 +1390,7 @@ TEST(test_fixture_parse_add) {
 
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ArcStatus s = arc_vm_run(&vm);
     fclose(vm.output);
     ASSERT(s == ARC_OK);
@@ -1407,7 +1414,7 @@ TEST(test_fixture_parse_file) {
 
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     fclose(vm.output);
     ASSERT_EQ_I64(arc_vm_result(&vm).as.i64, 15);
@@ -1460,7 +1467,7 @@ TEST(test_e2e_not_operator) {
 
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     fclose(vm.output);
 
@@ -1481,7 +1488,7 @@ TEST(test_e2e_not_via_fixture) {
 
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     fclose(vm.output);
 
@@ -1567,7 +1574,7 @@ TEST(test_golden_disassembly) {
 
     /* Disassemble to buffer */
     char dis_buf[4096] = {0};
-    FILE* memf = fopen("NUL", "w");
+    FILE* memf = fopen(DEV_NULL, "w");
     /* Use tmpfile to capture output */
     FILE* tmp = tmpfile();
     ASSERT(tmp != NULL);
@@ -1814,7 +1821,7 @@ TEST(test_structured_diagnostics) {
     d->related_count = 1;
 
     /* Print to NUL to exercise the printer */
-    FILE* f = fopen("NUL", "w");
+    FILE* f = fopen(DEV_NULL, "w");
     arc_diag_print(&diags, f);
     fclose(f);
 
@@ -1866,7 +1873,7 @@ TEST(test_ref_interp_5_plus_10) {
     ASSERT(cr.success);
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     fclose(vm.output);
     ArcValue vm_result = arc_vm_result(&vm);
@@ -1941,7 +1948,7 @@ TEST(test_ref_interp_function) {
     ASSERT(cr.success);
     ArcVm vm;
     arc_vm_init(&vm, &cr.image);
-    vm.output = fopen("NUL", "w");
+    vm.output = fopen(DEV_NULL, "w");
     ASSERT(arc_vm_run(&vm) == ARC_OK);
     fclose(vm.output);
 
@@ -2052,7 +2059,7 @@ TEST(test_hir_construct_and_dump) {
     ASSERT(m.main_body.stmts[0].as.print.value->as.binary.rhs->as.int_val == 10);
 
     /* Dump to NUL — exercises the pretty-printer without crashing */
-    FILE* f = fopen("NUL", "w");
+    FILE* f = fopen(DEV_NULL, "w");
     hir_dump(&m, f);
     fclose(f);
 
@@ -2070,7 +2077,7 @@ TEST(test_hir_function_with_params) {
     m.func_count = 1;
 
     HirFunction* fn = &m.functions[0];
-    strncpy(fn->name, "add1", sizeof(fn->name));
+    snprintf(fn->name, sizeof(fn->name), "%s", "add1");
     fn->arity = 1;
     fn->local_count = 1;
     fn->source_id = 200;
@@ -2091,7 +2098,7 @@ TEST(test_hir_function_with_params) {
     ASSERT(fn->body.count == 1);
     ASSERT(fn->body.stmts[0].kind == HIR_STMT_RETURN);
 
-    FILE* f = fopen("NUL", "w");
+    FILE* f = fopen(DEV_NULL, "w");
     hir_dump(&m, f);
     fclose(f);
 
@@ -2142,7 +2149,7 @@ TEST(test_mir_construct_and_dump) {
     mir_module_init(&m);
 
     MirFunction* fn = mir_module_add_func(&m);
-    strncpy(fn->name, "main", sizeof(fn->name));
+    snprintf(fn->name, sizeof(fn->name), "%s", "main");
     fn->arity = 0;
     fn->local_count = 0;
 
@@ -2167,7 +2174,7 @@ TEST(test_mir_construct_and_dump) {
     ASSERT(blk->instr_count == 1);
     ASSERT(blk->instrs[0].as.int_val == 42);
 
-    FILE* f = fopen("NUL", "w");
+    FILE* f = fopen(DEV_NULL, "w");
     mir_dump(&m, f);
     fclose(f);
 
@@ -2180,7 +2187,7 @@ TEST(test_mir_branching) {
     mir_module_init(&m);
 
     MirFunction* fn = mir_module_add_func(&m);
-    strncpy(fn->name, "test", sizeof(fn->name));
+    snprintf(fn->name, sizeof(fn->name), "%s", "test");
 
     MirBlockId b0 = mir_func_add_block(fn);
     MirBlockId b1 = mir_func_add_block(fn);
@@ -2234,7 +2241,7 @@ TEST(test_mir_validation_missing_terminator) {
     mir_module_init(&m);
 
     MirFunction* fn = mir_module_add_func(&m);
-    strncpy(fn->name, "bad", sizeof(fn->name));
+    snprintf(fn->name, sizeof(fn->name), "%s", "bad");
     mir_func_add_block(fn);  /* no terminator */
 
     MirValidation v = mir_validate(&m);
@@ -2296,7 +2303,7 @@ TEST(test_semantic_5_plus_10) {
     ASSERT(last->as.print.value->as.binary.rhs->as.int_val == 10);
 
     /* Dump should not crash */
-    FILE* f = fopen("NUL", "w");
+    FILE* f = fopen(DEV_NULL, "w");
     hir_dump(&sr.module, f);
     fclose(f);
 

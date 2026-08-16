@@ -624,8 +624,7 @@ static void lower_function(SemCtx* ctx, ArcNodeId func_node_id) {
 
     /* Copy function name */
     if (fn->attr.func.name) {
-        strncpy(hf->name, fn->attr.func.name, sizeof(hf->name) - 1);
-        hf->name[sizeof(hf->name) - 1] = '\0';
+        snprintf(hf->name, sizeof(hf->name), "%s", fn->attr.func.name);
     }
     hf->arity = fn->attr.func.arity;
     hf->source_id = fn->source_id;

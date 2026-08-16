@@ -57,10 +57,8 @@ static ArcPortId find_port(ParseState* s, const char* node_name, const char* rol
 static void register_port(ParseState* s, const char* node_name, const char* role,
                            ArcPortId pid, ArcNodeId owner) {
     if (s->port_count >= 1024) { perr(s, "too many ports"); return; }
-    strncpy(s->ports[s->port_count].node, node_name, 31);
-    s->ports[s->port_count].node[31] = '\0';
-    strncpy(s->ports[s->port_count].role, role, 31);
-    s->ports[s->port_count].role[31] = '\0';
+    snprintf(s->ports[s->port_count].node, 32, "%s", node_name);
+    snprintf(s->ports[s->port_count].role, 32, "%s", role);
     s->ports[s->port_count].id = pid;
     s->ports[s->port_count].owner = owner;
     s->port_count++;
@@ -109,7 +107,7 @@ static ArcNodeKind parse_node_kind(const char* s, char* attr_buf, size_t attr_sz
             memcpy(attr_buf, paren + 1, alen); attr_buf[alen] = '\0';
         }
     } else {
-        strncpy(kind, s, sizeof(kind) - 1);
+        snprintf(kind, sizeof(kind), "%s", s);
     }
 
     if (strcmp(kind, "const_int") == 0) return ARC_NODE_CONST_INT;
@@ -316,8 +314,7 @@ static void parse_line(ParseState* s, const char* line) {
 
         ArcRegionId rid = arc_graph_add_region(s->graph, kind, parent);
         if (s->region_count == 0) s->graph->root_region = rid;
-        strncpy(s->regions[s->region_count].name, name, 31);
-        s->regions[s->region_count].name[31] = '\0';
+        snprintf(s->regions[s->region_count].name, 32, "%s", name);
         s->regions[s->region_count].id = rid;
         s->region_count++;
 
@@ -360,8 +357,7 @@ static void parse_line(ParseState* s, const char* line) {
         default: break;
         }
 
-        strncpy(s->nodes[s->node_count].name, name, 31);
-        s->nodes[s->node_count].name[31] = '\0';
+        snprintf(s->nodes[s->node_count].name, 32, "%s", name);
         s->nodes[s->node_count].id = nid;
         s->node_count++;
 
@@ -385,14 +381,14 @@ static void parse_line(ParseState* s, const char* line) {
         dot = strchr(from_spec, '.');
         if (!dot) { perr(s, "edge from missing '.'"); return; }
         *dot = '\0';
-        strncpy(from_node, from_spec, 31); from_node[31] = '\0';
-        strncpy(from_role, dot + 1, 31); from_role[31] = '\0';
+        snprintf(from_node, 32, "%s", from_spec);
+        snprintf(from_role, 32, "%s", dot + 1);
 
         dot = strchr(to_spec, '.');
         if (!dot) { perr(s, "edge to missing '.'"); return; }
         *dot = '\0';
-        strncpy(to_node, to_spec, 31); to_node[31] = '\0';
-        strncpy(to_role, dot + 1, 31); to_role[31] = '\0';
+        snprintf(to_node, 32, "%s", to_spec);
+        snprintf(to_role, 32, "%s", dot + 1);
 
         ArcPortId from_port = find_port(s, from_node, from_role);
         ArcPortId to_port = find_port(s, to_node, to_role);
@@ -464,7 +460,7 @@ ArcFixtureResult arc_fixture_parse(const char* text) {
         parse_line(&state, line);
         if (state.had_error) {
             result.success = false;
-            strncpy(result.error, state.error, sizeof(result.error) - 1);
+            snprintf(result.error, sizeof(result.error), "%s", state.error);
             return result;
         }
     }

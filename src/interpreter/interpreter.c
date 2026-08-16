@@ -402,7 +402,7 @@ ArcInterpResult arc_interpret(const ArcGraph* graph) {
     result.result = ip.result;
     if (ip.had_error) {
         result.success = false;
-        strncpy(result.error, ip.error, sizeof(result.error) - 1);
+        snprintf(result.error, sizeof(result.error), "%s", ip.error);
     }
     return result;
 }

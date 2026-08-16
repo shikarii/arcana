@@ -34,9 +34,6 @@ static inline bool vm_pop(ArcVm* vm, ArcValue* v) {
     return true;
 }
 
-static inline ArcValue vm_peek(ArcVm* vm) {
-    return vm->stack[vm->sp - 1];
-}
 
 static inline uint8_t read_byte(ArcVm* vm) {
     return vm->image->code[vm->ip++];

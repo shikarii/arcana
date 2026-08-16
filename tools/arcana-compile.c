@@ -132,7 +132,7 @@ int main(int argc, char** argv) {
     /* Determine output path */
     char default_out[512] = {0};
     if (!output_path) {
-        strncpy(default_out, input_path, sizeof(default_out) - 5);
+        snprintf(default_out, sizeof(default_out) - 5, "%s", input_path);
         char* dot = strrchr(default_out, '.');
         if (dot) *dot = '\0';
         strcat(default_out, ".mgc");
