@@ -3570,6 +3570,7 @@ TEST(test_vm_closure_upvalue) {
     arc_vm_destroy(&vm);
     ARC_FREE(main_code.data);
     ARC_FREE(inner_code.data);
+    ARC_FREE(code.data);
     arc_const_pool_free(&img.constants);
     arc_func_table_free(&img.functions);
     arc_debug_table_free(&img.debug);
