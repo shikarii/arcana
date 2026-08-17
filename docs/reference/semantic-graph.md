@@ -22,6 +22,8 @@ Regions represent scopes. Each region has a kind, an optional parent, and a list
 | THEN            | Then branch of if           |
 | ELSE            | Else branch of if           |
 | LOOP_BODY       | While loop body             |
+| TRY             | Try block scope             |
+| CATCH           | Catch block scope           |
 
 ### Nodes
 
@@ -29,18 +31,19 @@ Nodes represent operations, literals, and bindings. Each node belongs to exactly
 
 #### Literals
 
-| Kind        | Attribute       | Description          |
-|-------------|-----------------|----------------------|
-| CONST_INT   | `int_value`     | 64-bit integer       |
-| CONST_FLOAT | `float_value`   | 64-bit float         |
-| CONST_BOOL  | `bool_value`    | Boolean              |
-| CONST_NULL  | —               | Null literal         |
+| Kind         | Attribute       | Description          |
+|--------------|-----------------|----------------------|
+| CONST_INT    | `int_value`     | 64-bit integer       |
+| CONST_FLOAT  | `float_value`   | 64-bit float         |
+| CONST_BOOL   | `bool_value`    | Boolean              |
+| CONST_NULL   | —               | Null literal         |
+| CONST_STRING | `string_value`  | String literal       |
 
 #### Arithmetic & Comparison
 
 | Kind | Ports          | Description     |
 |------|----------------|-----------------|
-| ADD  | lhs, rhs → out | Binary addition |
+| ADD  | lhs, rhs → out | Binary addition (also string concat) |
 | SUB  | lhs, rhs → out | Binary subtract |
 | MUL  | lhs, rhs → out | Binary multiply |
 | DIV  | lhs, rhs → out | Binary divide   |
@@ -53,6 +56,50 @@ Nodes represent operations, literals, and bindings. Each node belongs to exactly
 | GT   | lhs, rhs → out | Greater than    |
 | GE   | lhs, rhs → out | Greater or equal|
 | NOT  | value → out    | Logical not     |
+
+#### Logical (short-circuit)
+
+| Kind | Ports          | Description                              |
+|------|----------------|------------------------------------------|
+| AND  | lhs, rhs → out | Short-circuit and (JUMP_IF_FALSE)        |
+| OR   | lhs, rhs → out | Short-circuit or (JUMP_IF_TRUE)          |
+
+#### Bitwise (i64 only)
+
+| Kind    | Ports          | Description |
+|---------|----------------|-------------|
+| BIT_AND | lhs, rhs → out | a & b       |
+| BIT_OR  | lhs, rhs → out | a \| b      |
+| BIT_XOR | lhs, rhs → out | a ^ b       |
+| BIT_NOT | value → out    | ~a          |
+| SHL     | lhs, rhs → out | a << b      |
+| SHR     | lhs, rhs → out | a >> b      |
+
+#### Type Conversion
+
+| Kind     | Ports       | Description      |
+|----------|-------------|------------------|
+| CAST_I64 | value → out | any → i64        |
+| CAST_F64 | value → out | any → f64        |
+| CAST_STR | value → out | any → string     |
+
+#### String Operations
+
+| Kind      | Ports                | Description            |
+|-----------|----------------------|------------------------|
+| STR_LEN   | value → out          | String length → i64    |
+| STR_SLICE | str, start, end → out| Substring              |
+| STR_INDEX | str, idx → out       | Character at index     |
+
+#### Collections
+
+| Kind          | Ports               | Description              |
+|---------------|---------------------|--------------------------|
+| ARRAY_LITERAL | elements... → out   | Array construction       |
+| MAP_LITERAL   | (key,val)... → out  | Map construction         |
+| INDEX_GET     | container, key → out| Element access           |
+| INDEX_SET     | container, key, val →| Element assignment      |
+| LENGTH        | value → out         | Length of container      |
 
 #### Bindings
 
@@ -70,14 +117,23 @@ Nodes represent operations, literals, and bindings. Each node belongs to exactly
 | WHILE    | `body_region`                  | cond →  | Loop               |
 | SEQUENCE | —                              | —       | Ordered statements |
 
-#### Functions
+#### Functions & Closures
 
-| Kind      | Attribute                         | Ports        | Description         |
-|-----------|-----------------------------------|--------------|---------------------|
-| FUNC_DEF  | `name`, `arity`, `body_region`    | —            | Function definition |
-| FUNC_CALL | `name`                            | args... → out| Function call       |
-| PARAM     | `name`                            | —            | Function parameter  |
-| RETURN    | —                                 | value →      | Return from function|
+| Kind           | Attribute                      | Ports        | Description         |
+|----------------|--------------------------------|--------------|---------------------|
+| FUNC_DEF       | `name`, `arity`, `body_region` | —            | Function definition |
+| FUNC_CALL      | `name`                         | args... → out| Function call       |
+| PARAM          | `name`                         | —            | Function parameter  |
+| RETURN         | —                              | value →      | Return from function|
+| CLOSURE        | `name`, `arity`, `body_region` | —            | Closure definition  |
+| INTRINSIC_CALL | `name`                         | args... → out| Built-in call       |
+
+#### Exception Handling
+
+| Kind  | Attribute                   | Ports    | Description            |
+|-------|-----------------------------|----------|------------------------|
+| TRY   | `try_region`, `catch_region`| —        | Try/catch block        |
+| THROW | —                           | value →  | Throw exception        |
 
 #### Program Output
 

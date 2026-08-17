@@ -43,9 +43,11 @@ Each entry starts with a 1-byte tag:
 | 3   | f64    | 8 bytes, IEEE 754 double          |
 | 4   | string | u32 length + raw UTF-8 bytes      |
 
+Constant pool supports deduplication: identical values share the same index.
+
 ## Function Table
 
-Each function record (15 bytes):
+Each function record:
 
 | Offset | Size | Field            | Description                      |
 |--------|------|------------------|----------------------------------|
@@ -55,6 +57,14 @@ Each function record (15 bytes):
 | 5      | 2    | max_stack        | Maximum operand stack depth      |
 | 7      | 4    | code_offset      | Byte offset into code section    |
 | 11     | 4    | code_length      | Byte count of function code      |
+| 15     | 1    | upvalue_count    | Number of upvalue descriptors    |
+
+Following the fixed fields, `upvalue_count` upvalue descriptors (3 bytes each):
+
+| Offset | Size | Field    | Description                                |
+|--------|------|----------|--------------------------------------------|
+| 0      | 1    | is_local | 1 = captures enclosing local; 0 = captures enclosing upvalue |
+| 1      | 2    | index    | Local slot or upvalue index in enclosing function |
 
 Function index 0 is always `main` (the entry point).
 
@@ -66,7 +76,7 @@ Prefixed with a u32 byte count, followed by raw bytecode bytes. Instructions are
 [opcode: 1 byte] [operands: 0-4 bytes]
 ```
 
-See [opcode-reference.md](opcode-reference.md) for the full instruction set.
+See [opcode-reference.md](opcode-reference.md) for the full 41-instruction set.
 
 ## Debug Section (optional)
 
@@ -79,4 +89,4 @@ Only present if data remains after the code section.
   - u32: bc_end (bytecode offset, exclusive)
   - u64: element_id (source element identity)
 
-Debug entries map bytecode ranges back to source drawing elements via their stable `element_id`.
+Debug entries map bytecode ranges back to source drawing elements via their stable `element_id`. This is Arcana's equivalent of line numbers — it maps execution back to the original circle/glyph rather than to a line of text.

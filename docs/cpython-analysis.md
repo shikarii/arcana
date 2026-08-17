@@ -511,16 +511,16 @@ CPython's CI tests on **10+ platform combinations**:
 
 | Metric | Arcana | CPython |
 |--------|--------|---------|
-| Source LOC (C) | ~6,600 | ~600,000+ |
-| Test files | 1 (`test_all.c`) | 434 + 3 C test modules |
-| Test count | 93 | ~50,000+ |
-| Header files | 17 | ~260+ |
+| Source LOC (C) | ~7,500 | ~600,000+ |
+| Test files | 10 per-module + driver | 434 + 3 C test modules |
+| Test count | 123 | ~50,000+ |
+| Header files | ~22 | ~260+ |
 | CLI tools | 5 | 4 |
 | Platform targets | 3 (Linux, Windows, macOS) | 7+ (Linux, Windows, macOS, Android, iOS, WASM, WASI) |
 | Build system | CMake | autoconf + MSBuild |
 | CI workflows | 1 | 25 |
 | CI jobs | 4 | 30+ |
-| Internal docs | 5 | 18 |
+| Internal docs | 7 | 18 |
 | Fuzzing | 2 fuzz targets | OSS-Fuzz integration |
 
 ### 6.2 Architecture Comparison
@@ -530,16 +530,18 @@ CPython's CI tests on **10+ platform combinations**:
 | Frontend | Semantic graph (geometry) | PEG parser (text grammar) |
 | AST/IR | HIR → MIR → Bytecode | AST → instruction seq → CFG → bytecode |
 | Diagnostics | Structured codes (ARC-XXX-NNNN) | Ad-hoc error messages |
-| Memory | malloc/free with manual tracking | Arena allocator for compiler |
+| Memory | Arena allocator for compiler (`src/common/arena.c`) | Arena allocator for compiler |
 | GC | Mark-sweep GC (`runtime/gc.c`) | Refcounting + cyclic GC |
 | JIT | None | Copy-and-patch JIT |
 | Threads | N/A | GIL + free-threaded option |
-| Type system | Static (planned) | Dynamic (runtime) |
+| Type system | Static (`src/typecheck/typecheck.c`) | Dynamic (runtime) |
 | Module system | None yet | Full import system |
 | Object model | Unified `ArcObject` (string, array, map, closure, upvalue) | Fully implemented |
-| Opcodes | 41 (string, bitwise, cast, collections, closures, exceptions) | ~120 specialized |
+| Opcodes | 41 (string, bitwise, cast, collections, closures, exceptions) + 9 intrinsics | ~120 specialized |
 | Exception handling | Handler stack (try/catch/throw) | Exception table + block stack |
-| Collections | Arrays + maps (runtime) | list, dict, set, tuple (built-in types) |
+| Collections | Arrays + maps + records (runtime) | list, dict, set, tuple (built-in types) |
+| Error recovery | HIR_POISON propagation (multi-diagnostic) | Parser error recovery + continue-past-error |
+| LOC enforcement | 600/file, 60/function (CTest) | No formal limit |
 
 ---
 
@@ -547,11 +549,10 @@ CPython's CI tests on **10+ platform combinations**:
 
 ### 7.1 Critical Gaps (Address Before 1.0)
 
-#### G1: Arena Allocator for Compiler Passes
+#### G1: Arena Allocator for Compiler Passes ✅ DONE
 **CPython does this**: `pyarena.c` — all compiler memory goes into an arena, freed with one call.
-**Arcana status**: Manual `malloc`/`free` throughout. We already had 18 leak-fix commits from LeakSanitizer.
-**Recommendation**: Implement a simple arena allocator for the compiler pipeline. Each compile invocation creates an arena; all HIR/MIR/internal allocations draw from it. Single `arc_arena_free()` at the end.
-**Priority**: HIGH — prevents leak classes entirely.
+**Arcana status**: ✅ Implemented in `src/common/arena.h/.c`. Arena allocator used for compiler temporaries.
+**Priority**: Resolved.
 
 #### G2: Symbol Table / Scope Resolution Pass
 **CPython does this**: `symtable.c` — dedicated pass that resolves all scopes (local, global, free, cell) before compilation.
@@ -565,27 +566,22 @@ CPython's CI tests on **10+ platform combinations**:
 **Recommendation**: Design a basic module system. At minimum: file-level compilation units, symbol export/import, linking phase. The semantic graph model (circles reference other circles) maps naturally to this.
 **Priority**: HIGH — essential for any non-trivial program.
 
-#### G4: Object Model & Type System
+#### G4: Object Model & Type System ✅ MOSTLY DONE
 **CPython does this**: Full runtime type system with `PyObject`, type hierarchy, protocols.
-**Arcana status**: ✅ **DONE** — Unified `ArcObject` model with common header (`type`, `marked`, `next`). Five heap types: `OBJ_STRING`, `OBJ_ARRAY`, `OBJ_MAP`, `OBJ_CLOSURE`, `OBJ_UPVALUE`. Mark-sweep GC in `runtime/gc.c`. 41 opcodes covering strings, arrays, maps, closures, exceptions, bitwise, type casts. 7 intrinsics (type, assert, tostring, input, len, push, keys).
-**Remaining**: Type system at the compiler level (structural vs nominal), class/struct definitions, prototype/vtable dispatch.
+**Arcana status**: ✅ Unified `ArcObject` model with common header (`type`, `marked`, `next`). Six heap types: `OBJ_STRING`, `OBJ_ARRAY`, `OBJ_MAP`, `OBJ_CLOSURE`, `OBJ_UPVALUE`, `OBJ_RECORD`. Mark-sweep GC with stress mode in `runtime/gc.c`. 41 opcodes + 9 intrinsics. Type checker pass in `src/typecheck/typecheck.c`.
+**Remaining**: Class definitions, prototype/vtable dispatch, method dispatch.
 
 ### 7.2 Important Gaps (Address Before Public Release)
 
-#### G5: Test Infrastructure Scaling
+#### G5: Test Infrastructure Scaling ✅ MOSTLY DONE
 **CPython does this**: 434 test files, custom runner with parallelism, per-subsystem isolation.
-**Arcana status**: Single `test_all.c` with 93 tests (31 new VM completeness tests added).
-**Recommendation**:
-- Split tests by subsystem: `test_graph.c`, `test_semantic.c`, `test_hir.c`, `test_mir.c`, `test_vm.c`, `test_compiler.c`.
-- Add a test runner that discovers and runs test executables (CMake CTest already supports this).
-- Target: 500+ tests before public release. Each bytecode opcode, each error path, each edge case.
-**Priority**: MEDIUM-HIGH.
+**Arcana status**: ✅ 10 per-module test files with 123 tests. Split by subsystem (bytecode, vm, vm_collections, gc, graph, pipeline, pipeline_e2e, infra, runtime, error_recovery, verifier). LOC enforcement (600/file, 60/function) via CTest.
+**Remaining**: Target 500+ tests before public release.
 
-#### G6: Error Recovery in Semantic Analysis
+#### G6: Error Recovery in Semantic Analysis ✅ DONE
 **CPython does this**: Parser has sophisticated error recovery; compiler continues past errors to report multiple diagnostics.
-**Arcana status**: Diagnostics infrastructure exists (excellent `ArcDiagCode` system), but semantic analysis likely stops at first error.
-**Recommendation**: Implement "error node" propagation — when an error is found, insert a poison node and continue analyzing the rest of the graph. Report all diagnostics, not just the first.
-**Priority**: MEDIUM — critical for good user experience.
+**Arcana status**: ✅ Implemented via `HIR_POISON` nodes. When semantic analysis encounters an error, it returns a poison node instead of NULL and continues. Poison propagation prevents cascade errors. Tests verify multi-error reporting and poison behavior.
+**Priority**: Resolved.
 
 #### G7: Cross-Platform Target Expansion
 **CPython does this**: 7+ platforms with dedicated CI for each.
