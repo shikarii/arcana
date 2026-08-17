@@ -8,38 +8,6 @@
  * Shared Helpers
  * ================================================================ */
 
-/* Build a graph with a binary op: lhs_val OP rhs_val -> ROOT_OUTPUT.
- * Caller must free the graph. Returns the graph with output_node set. */
-static void build_binary_op_graph(ArcGraph* g, ArcNodeKind op,
-                                  int64_t lhs_val, int64_t rhs_val,
-                                  int base_id) {
-    arc_graph_init(g);
-    ArcRegionId r0 = arc_graph_add_region(g, ARC_REGION_MODULE, ARC_INVALID_ID);
-    g->root_region = r0;
-
-    ArcNodeId n_lhs = arc_graph_add_node(g, ARC_NODE_CONST_INT, r0, base_id);
-    g->nodes[n_lhs].attr.int_value = lhs_val;
-    ArcPortId p_lhs_out = arc_graph_add_port(g, n_lhs, ARC_PORT_OUTPUT, "out");
-
-    ArcNodeId n_rhs = arc_graph_add_node(g, ARC_NODE_CONST_INT, r0, base_id + 1);
-    g->nodes[n_rhs].attr.int_value = rhs_val;
-    ArcPortId p_rhs_out = arc_graph_add_port(g, n_rhs, ARC_PORT_OUTPUT, "out");
-
-    ArcNodeId n_op = arc_graph_add_node(g, op, r0, base_id + 2);
-    ArcPortId p_op_lhs = arc_graph_add_port(g, n_op, ARC_PORT_INPUT, "lhs");
-    ArcPortId p_op_rhs = arc_graph_add_port(g, n_op, ARC_PORT_INPUT, "rhs");
-    ArcPortId p_op_out = arc_graph_add_port(g, n_op, ARC_PORT_OUTPUT, "out");
-    ArcPortId order[] = { p_op_lhs, p_op_rhs, p_op_out };
-    arc_node_set_cyclic_order(g, n_op, order, 3);
-    arc_graph_add_edge(g, p_lhs_out, p_op_lhs);
-    arc_graph_add_edge(g, p_rhs_out, p_op_rhs);
-
-    ArcNodeId n_out = arc_graph_add_node(g, ARC_NODE_ROOT_OUTPUT, r0, base_id + 3);
-    ArcPortId p_out_in = arc_graph_add_port(g, n_out, ARC_PORT_INPUT, "value");
-    g->output_node = n_out;
-    arc_graph_add_edge(g, p_op_out, p_out_in);
-}
-
 /* Compile a graph, verify, run VM, write result to *out.
  * Caller must call cleanup_e2e() with the out params when done. */
 static void compile_and_run(ArcGraph* g, ArcCompileResult* cr,
