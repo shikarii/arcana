@@ -12,12 +12,16 @@ void arc_vm_init(ArcVm* vm, const ArcBytecodeImage* image) {
     memset(vm, 0, sizeof(*vm));
     vm->image = image;
     vm->output = stdout;
-    arc_gc_init(&vm->gc);
+    vm->gc = arc_gc_create();
+    vm->owns_gc = true;
     vm->open_upvalues = NULL;
 }
 
 void arc_vm_destroy(ArcVm* vm) {
-    arc_gc_free_all(&vm->gc);
+    if (vm->owns_gc && vm->gc) {
+        arc_gc_destroy(vm->gc);
+    }
+    vm->gc = NULL;
     vm->open_upvalues = NULL;
 }
 
@@ -175,25 +179,25 @@ static ArcStatus vm_exec_cast_str(ArcVm* vm) {
     char buf[64];
     switch (v.tag) {
     case VAL_NULL: {
-        ArcObjString* s = arc_obj_string_new(&vm->gc, "null", 4);
+        ArcObjString* s = arc_obj_string_new(vm->gc, "null", 4);
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
     case VAL_BOOL: {
         const char* t = v.as.b ? "true" : "false";
-        ArcObjString* s = arc_obj_string_new(&vm->gc, t, (uint32_t)strlen(t));
+        ArcObjString* s = arc_obj_string_new(vm->gc, t, (uint32_t)strlen(t));
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
     case VAL_I64: {
         int n = snprintf(buf, sizeof(buf), "%lld", (long long)v.as.i64);
-        ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
+        ArcObjString* s = arc_obj_string_new(vm->gc, buf, (uint32_t)n);
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
     case VAL_F64: {
         int n = snprintf(buf, sizeof(buf), "%g", v.as.f64);
-        ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
+        ArcObjString* s = arc_obj_string_new(vm->gc, buf, (uint32_t)n);
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
@@ -203,7 +207,7 @@ static ArcStatus vm_exec_cast_str(ArcVm* vm) {
         } else {
             const char* tn = arc_obj_type_name(ARC_OBJ_TYPE(v.as.obj));
             int n = snprintf(buf, sizeof(buf), "<%s>", tn);
-            ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
+            ArcObjString* s = arc_obj_string_new(vm->gc, buf, (uint32_t)n);
             if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         }
         break;
@@ -227,7 +231,7 @@ static ArcStatus vm_exec_stack_local_global(ArcVm* vm, uint8_t op) {
         if (idx >= vm->image->constants.count) {
             vm_error(vm, "invalid constant index %u", idx); return ARC_ERR_RUNTIME;
         }
-        if (!vm_push(vm, vm_const_to_val(&vm->gc, &vm->image->constants.entries[idx])))
+        if (!vm_push(vm, vm_const_to_val(vm->gc, &vm->image->constants.entries[idx])))
             return ARC_ERR_RUNTIME;
         return ARC_OK;
     }
@@ -340,6 +344,13 @@ static ArcStatus vm_dispatch(ArcVm* vm, uint8_t op, uint32_t instr_ip) {
     case OP_RECORD_NEW: case OP_FIELD_GET: case OP_FIELD_SET:
         return vm_exec_collections(vm, op);
     case OP_INTRINSIC: return vm_exec_intrinsic(vm);
+    case OP_CORO_NEW: case OP_CORO_RESUME:
+    case OP_CORO_YIELD: case OP_CORO_STATUS:
+    case OP_THREAD_SPAWN: case OP_THREAD_JOIN:
+    case OP_MUTEX_NEW: case OP_MUTEX_LOCK:
+    case OP_MUTEX_UNLOCK: case OP_CHAN_NEW:
+    case OP_CHAN_SEND: case OP_CHAN_RECV:
+        return vm_exec_concurrency(vm, op);
     case OP_HALT: vm->halted = true; return ARC_OK;
     default:
         vm_error(vm, "unknown opcode 0x%02X at %u", op, instr_ip);
@@ -361,6 +372,20 @@ ArcStatus arc_vm_run(ArcVm* vm) {
                     "  [%04u] %-16s sp=%u\n", instr_ip, arc_op_mnemonic(op), vm->sp);
         }
         st = vm_dispatch(vm, op, instr_ip);
+        if (st != ARC_OK) return st;
+    }
+    return ARC_OK;
+}
+
+ArcStatus arc_vm_continue(ArcVm* vm) {
+    vm->halted = false;
+    while (!vm->halted) {
+        if (vm->ip >= vm->image->code_len) {
+            vm_error(vm, "ip out of bounds"); return ARC_ERR_RUNTIME;
+        }
+        uint32_t instr_ip = vm->ip;
+        uint8_t op = vm_read_byte(vm);
+        ArcStatus st = vm_dispatch(vm, op, instr_ip);
         if (st != ARC_OK) return st;
     }
     return ARC_OK;

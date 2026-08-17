@@ -34,7 +34,7 @@ typedef struct {
 } ArcVmError;
 
 /* VM instance */
-typedef struct {
+typedef struct ArcVm {
     const ArcBytecodeImage* image;
 
     /* Operand stack */
@@ -59,8 +59,9 @@ typedef struct {
     ArcHandler handlers[ARC_HANDLER_MAX];
     uint32_t   handler_count;
 
-    /* Garbage collector */
-    ArcGC     gc;
+    /* Garbage collector (shared between coroutines/threads via pointer) */
+    ArcGC*    gc;
+    bool      owns_gc;      /* true = this VM created gc, will free it */
 
     /* Open upvalue chain (for closures) */
     ArcObjUpvalue* open_upvalues;
@@ -70,10 +71,16 @@ typedef struct {
 
     /* Trace mode */
     bool      trace;
+
+    /* Coroutine yield value (set by OP_CORO_YIELD) */
+    ArcValue  yielded;
 } ArcVm;
 
 /* Initialize VM with a loaded bytecode image */
 void arc_vm_init(ArcVm* vm, const ArcBytecodeImage* image);
+
+/* Continue execution from current ip (for coroutine resume) */
+ArcStatus arc_vm_continue(ArcVm* vm);
 
 /* Execute from function index 0 (main) until halt or error */
 ArcStatus arc_vm_run(ArcVm* vm);
@@ -81,7 +88,7 @@ ArcStatus arc_vm_run(ArcVm* vm);
 /* Get the top-of-stack value after execution */
 ArcValue arc_vm_result(const ArcVm* vm);
 
-/* Clean up VM resources (frees all GC objects) */
+/* Clean up VM resources (frees GC objects only if owns_gc) */
 void arc_vm_destroy(ArcVm* vm);
 
 #endif /* ARCANA_VM_H */

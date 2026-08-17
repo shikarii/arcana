@@ -64,5 +64,6 @@ ArcStatus vm_exec_collections(ArcVm* vm, uint8_t op);
 ArcStatus vm_exec_closure(ArcVm* vm, uint8_t op);
 ArcStatus vm_exec_exception(ArcVm* vm, uint8_t op);
 ArcStatus vm_exec_intrinsic(ArcVm* vm);
+ArcStatus vm_exec_concurrency(ArcVm* vm, uint8_t op);
 
 #endif /* ARCANA_VM_OPS_H */

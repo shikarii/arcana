@@ -152,6 +152,26 @@ bool arc_obj_record_get(ArcObjRecord* rec, const char* field, ArcValue* out) {
     return false;
 }
 
+/* --- Bitvec --- */
+
+ArcObjBitvec* arc_obj_bitvec_new(ArcGC* gc, uint32_t bit_count) {
+    ArcObjBitvec* bv = (ArcObjBitvec*)arc_gc_alloc(gc, sizeof(ArcObjBitvec), OBJ_BITVEC);
+    if (!bv) return NULL;
+    bv->bit_count = bit_count;
+    uint32_t byte_count = (bit_count + 7) / 8;
+    bv->bits = (uint8_t*)calloc(byte_count > 0 ? byte_count : 1, 1);
+    return bv;
+}
+
+uint32_t arc_obj_bitvec_popcount(ArcObjBitvec* bv) {
+    uint32_t count = 0, bytes = (bv->bit_count + 7) / 8;
+    for (uint32_t i = 0; i < bytes; i++) {
+        uint8_t b = bv->bits[i];
+        while (b) { count += b & 1; b >>= 1; }
+    }
+    return count;
+}
+
 /* --- Printing --- */
 
 void arc_obj_print(ArcObject* obj, FILE* out) {
@@ -198,6 +218,15 @@ void arc_obj_print(ArcObject* obj, FILE* out) {
         fprintf(out, "}");
         break;
     }
+    case OBJ_BITVEC: {
+        ArcObjBitvec* bv = (ArcObjBitvec*)obj;
+        fprintf(out, "<bitvec %u>", bv->bit_count);
+        break;
+    }
+    case OBJ_COROUTINE: fprintf(out, "<coroutine>"); break;
+    case OBJ_THREAD:    fprintf(out, "<thread>"); break;
+    case OBJ_MUTEX:     fprintf(out, "<mutex>"); break;
+    case OBJ_CHANNEL:   fprintf(out, "<channel>"); break;
     }
 }
 
@@ -211,6 +240,12 @@ bool arc_obj_equal(ArcObject* a, ArcObject* b) {
         ArcObjString* sa = (ArcObjString*)a;
         ArcObjString* sb = (ArcObjString*)b;
         return sa->len == sb->len && memcmp(sa->data, sb->data, sa->len) == 0;
+    }
+    case OBJ_BITVEC: {
+        ArcObjBitvec* ba = (ArcObjBitvec*)a;
+        ArcObjBitvec* bb = (ArcObjBitvec*)b;
+        if (ba->bit_count != bb->bit_count) return false;
+        return memcmp(ba->bits, bb->bits, (ba->bit_count + 7) / 8) == 0;
     }
     default:
         return false;  /* reference equality for other types */
@@ -227,6 +262,11 @@ const char* arc_obj_type_name(ArcObjType type) {
     case OBJ_CLOSURE: return "closure";
     case OBJ_UPVALUE: return "upvalue";
     case OBJ_RECORD:  return "record";
+    case OBJ_BITVEC:     return "bitvec";
+    case OBJ_COROUTINE: return "coroutine";
+    case OBJ_THREAD:    return "thread";
+    case OBJ_MUTEX:     return "mutex";
+    case OBJ_CHANNEL:   return "channel";
     }
     return "unknown";
 }

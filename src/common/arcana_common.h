@@ -31,6 +31,7 @@ typedef enum {
     ARC_ERR_RUNTIME,
     ARC_ERR_COMPILE,
     ARC_ERR_IO,
+    ARC_YIELD,           /* coroutine yielded (not an error) */
 } ArcStatus;
 
 /* --- Memory helpers --- */

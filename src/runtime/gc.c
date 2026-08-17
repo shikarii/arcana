@@ -7,6 +7,20 @@ void arc_gc_init(ArcGC* gc) {
     gc->stress_mode = false;
     gc->alloc_count = 0;
     gc->collect_count = 0;
+    arc_mutex_init(&gc->lock);
+}
+
+ArcGC* arc_gc_create(void) {
+    ArcGC* gc = (ArcGC*)calloc(1, sizeof(ArcGC));
+    if (gc) arc_gc_init(gc);
+    return gc;
+}
+
+void arc_gc_destroy(ArcGC* gc) {
+    if (!gc) return;
+    arc_gc_free_all(gc);
+    arc_mutex_destroy(&gc->lock);
+    free(gc);
 }
 
 void arc_gc_set_stress(ArcGC* gc, bool enabled) {
@@ -14,17 +28,22 @@ void arc_gc_set_stress(ArcGC* gc, bool enabled) {
 }
 
 ArcObject* arc_gc_alloc(ArcGC* gc, size_t size, ArcObjType type) {
+    arc_mutex_lock(&gc->lock);
     gc->alloc_count++;
-
     ArcObject* obj = (ArcObject*)calloc(1, size);
-    if (!obj) return NULL;
+    if (!obj) { arc_mutex_unlock(&gc->lock); return NULL; }
     obj->type = type;
     obj->marked = false;
     obj->next = gc->objects;
     gc->objects = obj;
     gc->bytes_allocated += size;
+    arc_mutex_unlock(&gc->lock);
     return obj;
 }
+
+/* Forward declarations — defined in concurrency.c */
+void arc_concurrency_mark_obj(ArcObject* obj);
+void arc_concurrency_free_obj(ArcObject* obj);
 
 /* --- Marking --- */
 
@@ -32,9 +51,9 @@ void arc_gc_mark_object(ArcObject* obj) {
     if (!obj || obj->marked) return;
     obj->marked = true;
 
-    /* Trace references within the object */
     switch (obj->type) {
     case OBJ_STRING:
+    case OBJ_BITVEC:
         break;  /* no outgoing references */
     case OBJ_ARRAY: {
         ArcObjArray* arr = (ArcObjArray*)obj;
@@ -60,9 +79,7 @@ void arc_gc_mark_object(ArcObject* obj) {
     }
     case OBJ_UPVALUE: {
         ArcObjUpvalue* uv = (ArcObjUpvalue*)obj;
-        /* Mark the closed-over value (if closed, location == &closed) */
         arc_gc_mark_value(uv->closed);
-        /* If still open, the stack slot is already a root */
         break;
     }
     case OBJ_RECORD: {
@@ -71,6 +88,12 @@ void arc_gc_mark_object(ArcObject* obj) {
             arc_gc_mark_value(rec->fields[i]);
         break;
     }
+    case OBJ_COROUTINE:
+    case OBJ_THREAD:
+    case OBJ_MUTEX:
+    case OBJ_CHANNEL:
+        arc_concurrency_mark_obj(obj);
+        break;
     }
 }
 
@@ -84,32 +107,32 @@ void arc_gc_mark_value(ArcValue val) {
 static void free_object(ArcObject* obj) {
     switch (obj->type) {
     case OBJ_STRING:
-        /* ArcObjString uses flexible array member, just free */
         break;
-    case OBJ_ARRAY: {
-        ArcObjArray* arr = (ArcObjArray*)obj;
-        free(arr->items);
+    case OBJ_ARRAY:
+        free(((ArcObjArray*)obj)->items);
         break;
-    }
-    case OBJ_MAP: {
-        ArcObjMap* map = (ArcObjMap*)obj;
-        free(map->keys);
-        free(map->values);
+    case OBJ_MAP:
+        free(((ArcObjMap*)obj)->keys);
+        free(((ArcObjMap*)obj)->values);
         break;
-    }
-    case OBJ_CLOSURE: {
-        ArcObjClosure* cl = (ArcObjClosure*)obj;
-        free(cl->upvalues);
+    case OBJ_CLOSURE:
+        free(((ArcObjClosure*)obj)->upvalues);
         break;
-    }
     case OBJ_UPVALUE:
         break;
-    case OBJ_RECORD: {
-        ArcObjRecord* rec = (ArcObjRecord*)obj;
-        free(rec->fields);
-        free(rec->field_names);
+    case OBJ_RECORD:
+        free(((ArcObjRecord*)obj)->fields);
+        free(((ArcObjRecord*)obj)->field_names);
         break;
-    }
+    case OBJ_BITVEC:
+        free(((ArcObjBitvec*)obj)->bits);
+        break;
+    case OBJ_COROUTINE:
+    case OBJ_THREAD:
+    case OBJ_MUTEX:
+    case OBJ_CHANNEL:
+        arc_concurrency_free_obj(obj);
+        break;
     }
     free(obj);
 }
@@ -118,7 +141,7 @@ static void sweep(ArcGC* gc) {
     ArcObject** pp = &gc->objects;
     while (*pp) {
         if ((*pp)->marked) {
-            (*pp)->marked = false;  /* reset for next cycle */
+            (*pp)->marked = false;
             pp = &(*pp)->next;
         } else {
             ArcObject* unreached = *pp;
@@ -132,26 +155,17 @@ void arc_gc_collect(ArcGC* gc,
                     ArcValue* stack, uint32_t sp,
                     ArcValue* globals, uint16_t global_count,
                     ArcObjUpvalue* open_upvalues) {
-    /* Mark roots: stack */
     for (uint32_t i = 0; i < sp; i++)
         arc_gc_mark_value(stack[i]);
-
-    /* Mark roots: globals */
     for (uint16_t i = 0; i < global_count; i++)
         arc_gc_mark_value(globals[i]);
-
-    /* Mark roots: open upvalue chain */
     ArcObjUpvalue* uv = open_upvalues;
     while (uv) {
         arc_gc_mark_object((ArcObject*)uv);
         uv = uv->next;
     }
-
-    /* Sweep */
     sweep(gc);
     gc->collect_count++;
-
-    /* Adjust threshold */
     gc->next_gc = gc->bytes_allocated * ARC_GC_GROW_FACTOR;
     if (gc->next_gc < ARC_GC_INITIAL_THRESHOLD)
         gc->next_gc = ARC_GC_INITIAL_THRESHOLD;
