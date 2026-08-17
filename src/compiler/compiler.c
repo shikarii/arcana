@@ -148,15 +148,16 @@ static bool is_expr_node(ArcNodeKind k) {
 /* Forward declaration */
 static void compile_node(Compiler* c, ArcNodeId node_id);
 
-static void compile_region_stmts(Compiler* c, ArcRegionId rid) {
+static void compile_region_from(Compiler* c, ArcRegionId rid, uint32_t start) {
     if (rid == ARC_INVALID_ID) return;
     const ArcRegion* r = &c->graph->regions[rid];
-    for (uint32_t i = 0; i < r->member_count; i++) {
+    for (uint32_t i = start; i < r->member_count; i++) {
         const ArcNode* m = &c->graph->nodes[r->members[i]];
         if (m->kind == ARC_NODE_PARAM || is_expr_node(m->kind)) continue;
         compile_node(c, r->members[i]);
     }
 }
+#define compile_region_stmts(c, rid) compile_region_from(c, rid, 0)
 
 /* --- Binary/unary compilation --- */
 static void compile_binary(Compiler* c, ArcNodeId node_id, uint8_t op) {
@@ -373,7 +374,7 @@ static void compile_control(Compiler* c, ArcNodeId node_id, const ArcNode* n) {
         patch_jump(c, ej);
         compile_region_stmts(c, n->attr.branch.else_region);
         patch_jump(c, endj);
-    } else { /* WHILE */
+    } else if (n->kind == ARC_NODE_WHILE) {
         uint32_t top = (uint32_t)c->code.len;
         ArcPortId cp = find_port_by_role(c->graph, node_id, "cond", ARC_PORT_INPUT);
         ArcNodeId cs = find_source_node(c->graph, cp);
@@ -383,10 +384,33 @@ static void compile_control(Compiler* c, ArcNodeId node_id, const ArcNode* n) {
         emit_op(c, OP_JUMP);
         emit_i32(c, (int32_t)top - (int32_t)(c->code.len + 4));
         patch_jump(c, ex);
+    } else { /* CYCLE — topology-derived loop */
+        ArcRegionId body_rid = n->attr.cycle.body_region;
+        const ArcRegion* body = &c->graph->regions[body_rid];
+        uint32_t top = (uint32_t)c->code.len;
+        uint32_t exit_jump = 0;
+        bool has_break = false;
+        /* Find BREAK_IF among members, emit condition + exit jump */
+        for (uint32_t bi = 0; bi < body->member_count; bi++) {
+            if (c->graph->nodes[body->members[bi]].kind == ARC_NODE_BREAK_IF) {
+                ArcNodeId brk = body->members[bi];
+                ArcPortId cp = find_port_by_role(c->graph, brk, "cond", ARC_PORT_INPUT);
+                ArcNodeId cs = find_source_node(c->graph, cp);
+                if (cs != ARC_INVALID_ID) compile_node(c, cs);
+                exit_jump = emit_jump(c, OP_JUMP_IF_TRUE);
+                has_break = true;
+                break;
+            }
+        }
+        compile_region_from(c, body_rid, 0);
+        emit_op(c, OP_JUMP);
+        emit_i32(c, (int32_t)top - (int32_t)(c->code.len + 4));
+        if (has_break) patch_jump(c, exit_jump);
     }
 }
 
 static void compile_func_call(Compiler* c, ArcNodeId node_id, const ArcNode* n) {
+    (void)node_id;
     uint8_t argc = 0;
     if (n->cyclic_count > 0) {
         for (uint32_t i = 0; i < n->cyclic_count; i++) {
@@ -451,7 +475,9 @@ static void compile_node(Compiler* c, ArcNodeId node_id) {
     case ARC_NODE_LET: case ARC_NODE_ASSIGN: case ARC_NODE_PRINT:
     case ARC_NODE_ROOT_OUTPUT: case ARC_NODE_RETURN:
         compile_stmts(c, node_id, n); break;
-    case ARC_NODE_IF: case ARC_NODE_WHILE: compile_control(c, node_id, n); break;
+    case ARC_NODE_IF: case ARC_NODE_WHILE: case ARC_NODE_CYCLE:
+        compile_control(c, node_id, n); break;
+    case ARC_NODE_BREAK_IF: break; /* handled inside CYCLE compilation */
     case ARC_NODE_FUNC_CALL: compile_func_call(c, node_id, n); break;
     case ARC_NODE_SEQUENCE: case ARC_NODE_PARAM: break;
     default: cerr(c, "unsupported node kind %d at node %u", n->kind, node_id); break;

@@ -155,6 +155,15 @@ extern void test_hir_poison_dump(void);
 extern void test_hir_poison_validation(void);
 extern void test_semantic_mixed_errors(void);
 
+/* --- test_cycle.c --- */
+extern void test_cycle_sum_5(void);
+extern void test_cycle_sum_0(void);
+extern void test_cycle_sum_1(void);
+extern void test_cycle_sum_100(void);
+extern void test_cycle_interp_agreement(void);
+extern void test_cycle_semantic_lowering(void);
+extern void test_cycle_scope_resolution(void);
+
 /* ================================================================
  * Sub-runner functions (keep main() under 60 lines)
  * ================================================================ */
@@ -388,6 +397,17 @@ static void run_error_recovery_tests(void) {
     RUN(test_semantic_mixed_errors);
 }
 
+static void run_cycle_tests(void) {
+    printf("\n[Topology-Derived Iteration (CYCLE)]\n");
+    RUN(test_cycle_sum_5);
+    RUN(test_cycle_sum_0);
+    RUN(test_cycle_sum_1);
+    RUN(test_cycle_sum_100);
+    RUN(test_cycle_interp_agreement);
+    RUN(test_cycle_semantic_lowering);
+    RUN(test_cycle_scope_resolution);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -404,6 +424,7 @@ int main(void) {
     run_gc_tests();
     run_runtime_tests();
     run_error_recovery_tests();
+    run_cycle_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

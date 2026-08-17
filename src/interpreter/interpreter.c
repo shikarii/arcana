@@ -168,6 +168,7 @@ static ArcValue eval_comparison(Interp* ip, ArcNodeId node_id, const ArcNode* n)
 
 /* --- Evaluate function call --- */
 static ArcValue eval_func_call(Interp* ip, ArcNodeId node_id, const ArcNode* n) {
+    (void)node_id;
     const char* fname = n->attr.name;
     ArcNodeId func_def = ARC_INVALID_ID;
     for (uint32_t i = 0; i < ip->graph->node_count; i++) {
@@ -282,55 +283,69 @@ static bool is_interp_expr(ArcNodeKind k) {
     }
 }
 
-/* --- Execute a single statement node in a region --- */
+/* Forward declaration */
+static void exec_stmt(Interp* ip, ArcNodeId mid, const ArcNode* m);
+
+static void exec_cycle(Interp* ip, const ArcNode* m) {
+    ArcRegionId body_rid = m->attr.cycle.body_region;
+    int max_iter = 100000;
+    while (max_iter-- > 0 && !ip->had_error && !ip->returned) {
+        if (body_rid == ARC_INVALID_ID) break;
+        const ArcRegion* body = &ip->graph->regions[body_rid];
+        bool do_break = false;
+        for (uint32_t ci = 0; ci < body->member_count; ci++) {
+            ArcNodeId cid = body->members[ci];
+            const ArcNode* cn = &ip->graph->nodes[cid];
+            if (cn->kind == ARC_NODE_BREAK_IF) {
+                ArcValue bcond = eval_input(ip, cid, "cond");
+                if (arc_val_is_truthy(bcond)) { do_break = true; break; }
+                continue;
+            }
+            if (cn->kind == ARC_NODE_PARAM || is_interp_expr(cn->kind))
+                continue;
+            exec_stmt(ip, cid, cn);
+        }
+        if (do_break) break;
+    }
+    if (max_iter <= 0) ierr(ip, "cycle iteration limit exceeded");
+}
+
 static void exec_stmt(Interp* ip, ArcNodeId mid, const ArcNode* m) {
     switch (m->kind) {
-    case ARC_NODE_LET: {
-        ArcValue val = eval_input(ip, mid, "value");
-        set_var(ip, m->attr.name, val);
-        break;
-    }
+    case ARC_NODE_LET:
+        set_var(ip, m->attr.name, eval_input(ip, mid, "value")); break;
     case ARC_NODE_ASSIGN: {
-        ArcValue val = eval_input(ip, mid, "value");
         int idx = find_var(ip, m->attr.name);
         if (idx < 0) { ierr(ip, "undefined variable '%s'", m->attr.name); return; }
-        ip->vars[idx].value = val;
-        break;
+        ip->vars[idx].value = eval_input(ip, mid, "value"); break;
     }
     case ARC_NODE_PRINT: {
-        ArcValue val = eval_input(ip, mid, "value");
         FILE* out = ip->output ? ip->output : stdout;
-        arc_val_print(val, out);
-        fprintf(out, "\n");
-        break;
+        arc_val_print(eval_input(ip, mid, "value"), out);
+        fprintf(out, "\n"); break;
     }
     case ARC_NODE_RETURN:
         ip->result = eval_input(ip, mid, "value");
-        ip->returned = true;
-        return;
-    case ARC_NODE_IF: {
-        ArcValue cond = eval_input(ip, mid, "cond");
-        if (arc_val_is_truthy(cond))
+        ip->returned = true; return;
+    case ARC_NODE_IF:
+        if (arc_val_is_truthy(eval_input(ip, mid, "cond")))
             exec_region_stmts(ip, m->attr.branch.then_region);
-        else
-            exec_region_stmts(ip, m->attr.branch.else_region);
+        else exec_region_stmts(ip, m->attr.branch.else_region);
         break;
-    }
     case ARC_NODE_WHILE: {
         int max_iter = 100000;
         while (max_iter-- > 0 && !ip->had_error && !ip->returned) {
-            ArcValue cond = eval_input(ip, mid, "cond");
-            if (!arc_val_is_truthy(cond)) break;
+            if (!arc_val_is_truthy(eval_input(ip, mid, "cond"))) break;
             exec_region_stmts(ip, m->attr.loop.body_region);
         }
         if (max_iter <= 0) ierr(ip, "loop iteration limit exceeded");
         break;
     }
+    case ARC_NODE_CYCLE: exec_cycle(ip, m); break;
+    case ARC_NODE_BREAK_IF: break;
     case ARC_NODE_ROOT_OUTPUT:
-        ip->result = eval_input(ip, mid, "value");
-        break;
-    default:
-        break;
+        ip->result = eval_input(ip, mid, "value"); break;
+    default: break;
     }
 }
 
@@ -384,7 +399,7 @@ ArcInterpResult arc_interpret(const ArcGraph* graph) {
             fprintf(out, "\n");
             break;
         }
-        default: break;
+        default: exec_stmt(&ip, mid, m); break;
         }
     }
 

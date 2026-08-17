@@ -82,6 +82,7 @@ static ArcRegionKind parse_region_kind(const char* s) {
     if (strcmp(s, "then") == 0) return ARC_REGION_THEN;
     if (strcmp(s, "else") == 0) return ARC_REGION_ELSE;
     if (strcmp(s, "loop_body") == 0) return ARC_REGION_LOOP_BODY;
+    if (strcmp(s, "cycle") == 0) return ARC_REGION_CYCLE;
     return ARC_REGION_MODULE;
 }
 
@@ -132,6 +133,8 @@ static ArcNodeKind parse_node_kind(const char* s, char* attr_buf, size_t attr_sz
     if (strcmp(kind, "print") == 0) return ARC_NODE_PRINT;
     if (strcmp(kind, "root_output") == 0) return ARC_NODE_ROOT_OUTPUT;
     if (strcmp(kind, "sequence") == 0) return ARC_NODE_SEQUENCE;
+    if (strcmp(kind, "cycle") == 0) return ARC_NODE_CYCLE;
+    if (strcmp(kind, "break_if") == 0) return ARC_NODE_BREAK_IF;
     return ARC_NODE_CONST_NULL;
 }
 
@@ -193,6 +196,9 @@ static void add_default_ports(ParseState* s, const char* node_name, ArcNodeId ni
         break;
     case ARC_NODE_FUNC_CALL:
         add_output_port(s, node_name, nid); break;
+    case ARC_NODE_BREAK_IF:
+        add_input_port(s, node_name, nid, "cond"); break;
+    case ARC_NODE_CYCLE: break; /* no default ports */
     default: break;
     }
 }
@@ -267,6 +273,7 @@ static const char* parse_node_attrs(ParseState* s, ArcNodeId nid, ArcNodeKind ki
         else if (strcmp(key, "body_region") == 0) {
             if (kind == ARC_NODE_WHILE) n->attr.loop.body_region = find_region(s, val);
             else if (kind == ARC_NODE_FUNC_DEF) n->attr.func.body_region = find_region(s, val);
+            else if (kind == ARC_NODE_CYCLE) n->attr.cycle.body_region = find_region(s, val);
         }
         else if (strcmp(key, "arity") == 0) {
             if (kind == ARC_NODE_FUNC_DEF) n->attr.func.arity = (uint8_t)atoi(val);

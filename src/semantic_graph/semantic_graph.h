@@ -69,6 +69,8 @@ typedef enum {
     ARC_NODE_THROW,         /* throw exception */
     ARC_NODE_CLOSURE,       /* closure expression (wraps func_def) */
     ARC_NODE_INTRINSIC_CALL,/* intrinsic function call */
+    ARC_NODE_BREAK_IF,      /* exit nearest CYCLE region when cond is true */
+    ARC_NODE_CYCLE,         /* topology-derived iteration: attr.cycle.body_region */
 } ArcNodeKind;
 
 /* --- Port direction --- */
@@ -103,6 +105,7 @@ typedef enum {
     ARC_REGION_LOOP_BODY,   /* loop body */
     ARC_REGION_TRY_BODY,    /* try block body */
     ARC_REGION_CATCH_BODY,  /* catch block body */
+    ARC_REGION_CYCLE,       /* repeating region — topology-derived iteration */
 } ArcRegionKind;
 
 /* --- Region --- */
@@ -163,6 +166,9 @@ typedef struct {
         struct {
             uint16_t id;            /* ArcIntrinsicId */
         } intrinsic;               /* INTRINSIC_CALL */
+        struct {
+            ArcRegionId body_region;
+        } cycle;                   /* CYCLE (topology-derived loop) */
     } attr;
 } ArcNode;
 

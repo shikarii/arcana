@@ -192,9 +192,10 @@ static ArcType infer_simple_kind(TcCtx* ctx, ArcNodeId node_id, const ArcNode* n
     case ARC_NODE_MAP_LITERAL:   return ARC_TYPE_MAP;
     case ARC_NODE_INDEX_GET:     return ARC_TYPE_ANY;
     case ARC_NODE_INDEX_SET:     return ARC_TYPE_NULL;
-    case ARC_NODE_IF: case ARC_NODE_WHILE: case ARC_NODE_LET:
-    case ARC_NODE_ASSIGN: case ARC_NODE_SEQUENCE:
-    case ARC_NODE_ROOT_OUTPUT: case ARC_NODE_PRINT: return ARC_TYPE_NULL;
+    case ARC_NODE_IF: case ARC_NODE_WHILE: case ARC_NODE_CYCLE:
+    case ARC_NODE_LET: case ARC_NODE_ASSIGN: case ARC_NODE_SEQUENCE:
+    case ARC_NODE_ROOT_OUTPUT: case ARC_NODE_PRINT:
+    case ARC_NODE_BREAK_IF: return ARC_TYPE_NULL;
     case ARC_NODE_VAR_REF: case ARC_NODE_FUNC_CALL:
     case ARC_NODE_INTRINSIC_CALL: case ARC_NODE_PARAM: return ARC_TYPE_ANY;
     case ARC_NODE_FUNC_DEF: case ARC_NODE_CLOSURE: return ARC_TYPE_CLOSURE;

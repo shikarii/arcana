@@ -6,10 +6,24 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # --- Compiler flags ---
 if(MSVC)
-    add_compile_options(/W4)
+    add_compile_options(
+        /W4 /WX          # high warnings + treat as errors
+        /wd4200          # C4200: flexible array members (valid C17)
+        /wd4127          # C4127: conditional expression is constant (do-while macros)
+    )
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 else()
-    add_compile_options(-Wall -Wextra -Werror -Wno-unused-parameter)
+    add_compile_options(
+        -Wall -Wextra -Werror -Wpedantic
+        -Wshadow                 # warn on shadowed variables
+        -Wstrict-prototypes      # require full prototypes
+        -Wold-style-definition   # reject K&R-style function defs
+        -Wmissing-prototypes     # warn on missing forward declarations
+        -Wdouble-promotion      # warn on float→double implicit promotion
+        -Wformat=2               # stricter printf format checking
+        -Wnull-dereference       # warn on null pointer deref paths
+        -Wno-unused-parameter    # allow unused params (common in callbacks)
+    )
 endif()
 
 # --- Library: arcana_common ---
@@ -73,6 +87,7 @@ target_include_directories(arcana_mir PUBLIC src)
 
 # --- Library: arcana_semantic ---
 add_library(arcana_semantic STATIC
+    src/semantic/scope.c
     src/semantic/semantic.c
     src/semantic/semantic_expr.c
 )
@@ -110,6 +125,7 @@ add_executable(arcana_tests
     tests/test_pipeline_e2e.c
     tests/test_vm_collections.c
     tests/test_error_recovery.c
+    tests/test_cycle.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode

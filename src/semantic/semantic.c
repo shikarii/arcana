@@ -1,42 +1,6 @@
 #include "semantic_internal.h"
 
 /* ===================================================================
- * Scope stack implementation
- * =================================================================== */
-
-void scope_init(SemScope* s) {
-    s->local_count = 0;
-    s->scope_depth = 0;
-}
-
-void scope_push(SemScope* s) {
-    assert(s->scope_depth < SEM_MAX_SCOPES);
-    s->scope_starts[s->scope_depth++] = s->local_count;
-}
-
-void scope_pop(SemScope* s) {
-    assert(s->scope_depth > 0);
-    s->local_count = s->scope_starts[--s->scope_depth];
-}
-
-int scope_find(const SemScope* s, const char* name) {
-    for (int i = (int)s->local_count - 1; i >= 0; i--) {
-        if (strcmp(s->locals[i].name, name) == 0)
-            return (int)s->locals[i].slot;
-    }
-    return -1;
-}
-
-uint16_t scope_add(SemScope* s, const char* name) {
-    assert(s->local_count < SEM_MAX_LOCALS);
-    uint16_t slot = s->local_count;
-    s->locals[s->local_count].name = name;
-    s->locals[s->local_count].slot = slot;
-    s->local_count++;
-    return slot;
-}
-
-/* ===================================================================
  * Diagnostics helper
  * =================================================================== */
 
@@ -145,7 +109,7 @@ HirExprKind node_kind_to_binary_expr(ArcNodeKind k) {
 static void lower_stmt_let(SemCtx* ctx, ArcNodeId node_id,
                             const ArcNode* n, HirBlock* block) {
     HirExpr* value = lower_value_from_port(ctx, node_id, "value", "in");
-    uint16_t slot = scope_add(&ctx->scope, n->attr.name);
+    uint16_t slot = arc_scope_add(&ctx->scope, n->attr.name);
     HirStmt* stmt = hir_block_add(block, HIR_STMT_LET, n->source_id);
     stmt->as.let.var_idx = slot;
     stmt->as.let.value = value;
@@ -154,7 +118,7 @@ static void lower_stmt_let(SemCtx* ctx, ArcNodeId node_id,
 static void lower_stmt_assign(SemCtx* ctx, ArcNodeId node_id,
                                 const ArcNode* n, HirBlock* block) {
     HirExpr* value = lower_value_from_port(ctx, node_id, "value", "in");
-    int slot = scope_find(&ctx->scope, n->attr.name);
+    int slot = arc_scope_find(&ctx->scope, n->attr.name);
     if (slot < 0) {
         sem_error(ctx, ARC_ERR_UNDEFINED_VARIABLE, node_id, n->source_id,
                   "undefined variable '%s' in assign", n->attr.name);
@@ -202,14 +166,14 @@ static void lower_stmt_if(SemCtx* ctx, ArcNodeId node_id,
     memset(&stmt->as.if_stmt.then_block, 0, sizeof(HirBlock));
     memset(&stmt->as.if_stmt.else_block, 0, sizeof(HirBlock));
 
-    scope_push(&ctx->scope);
+    arc_scope_push(&ctx->scope);
     lower_region_stmts(ctx, n->attr.branch.then_region, &stmt->as.if_stmt.then_block);
-    scope_pop(&ctx->scope);
+    arc_scope_pop(&ctx->scope);
 
     if (n->attr.branch.else_region != ARC_INVALID_ID) {
-        scope_push(&ctx->scope);
+        arc_scope_push(&ctx->scope);
         lower_region_stmts(ctx, n->attr.branch.else_region, &stmt->as.if_stmt.else_block);
-        scope_pop(&ctx->scope);
+        arc_scope_pop(&ctx->scope);
     }
 }
 
@@ -225,9 +189,57 @@ static void lower_stmt_while(SemCtx* ctx, ArcNodeId node_id,
     stmt->as.while_stmt.cond = cond;
     memset(&stmt->as.while_stmt.body, 0, sizeof(HirBlock));
 
-    scope_push(&ctx->scope);
+    arc_scope_push(&ctx->scope);
     lower_region_stmts(ctx, n->attr.loop.body_region, &stmt->as.while_stmt.body);
-    scope_pop(&ctx->scope);
+    arc_scope_pop(&ctx->scope);
+}
+
+/* --- topology-derived cycle: lower CYCLE region as a while loop --- */
+static void lower_stmt_cycle(SemCtx* ctx, ArcNodeId node_id,
+                              const ArcNode* n, HirBlock* block) {
+    ArcRegionId body_rid = n->attr.cycle.body_region;
+    if (body_rid == ARC_INVALID_ID || body_rid >= ctx->graph->region_count) {
+        sem_error(ctx, ARC_ERR_INVALID_REGION, node_id, n->source_id,
+                  "cycle node %u has invalid body region", node_id);
+        return;
+    }
+    const ArcRegion* body = &ctx->graph->regions[body_rid];
+
+    /* Find BREAK_IF at start of body → optimize to while(!cond) */
+    HirExpr* cond = NULL;
+    uint32_t body_start = 0;
+    if (body->member_count > 0) {
+        ArcNodeId first = body->members[0];
+        if (ctx->graph->nodes[first].kind == ARC_NODE_BREAK_IF) {
+            cond = lower_value_from_port(ctx, first, "cond", NULL);
+            if (cond) {
+                /* Negate: while(!break_cond) { ... } */
+                HirExpr* neg = hir_expr_new(HIR_NOT, cond->source_id);
+                neg->as.unary.operand = cond;
+                cond = neg;
+            }
+            body_start = 1;
+        }
+    }
+    /* No leading BREAK_IF → while(true) */
+    if (!cond) {
+        cond = hir_expr_new(HIR_CONST_BOOL, n->source_id);
+        cond->as.bool_val = true;
+    }
+
+    HirStmt* stmt = hir_block_add(block, HIR_STMT_WHILE, n->source_id);
+    stmt->as.while_stmt.cond = cond;
+    memset(&stmt->as.while_stmt.body, 0, sizeof(HirBlock));
+
+    arc_scope_push(&ctx->scope);
+    for (uint32_t i = body_start; i < body->member_count; i++) {
+        ArcNodeId mid = body->members[i];
+        const ArcNode* m = &ctx->graph->nodes[mid];
+        if (m->kind == ARC_NODE_PARAM) continue;
+        if (is_expr_node(m->kind)) continue;
+        lower_stmt(ctx, mid, &stmt->as.while_stmt.body);
+    }
+    arc_scope_pop(&ctx->scope);
 }
 
 void lower_stmt(SemCtx* ctx, ArcNodeId node_id, HirBlock* block) {
@@ -247,6 +259,8 @@ void lower_stmt(SemCtx* ctx, ArcNodeId node_id, HirBlock* block) {
     case ARC_NODE_ROOT_OUTPUT: lower_stmt_simple_value(ctx, node_id, n, block, HIR_STMT_PRINT); break;
     case ARC_NODE_IF:          lower_stmt_if(ctx, node_id, n, block); break;
     case ARC_NODE_WHILE:       lower_stmt_while(ctx, node_id, n, block); break;
+    case ARC_NODE_CYCLE:       lower_stmt_cycle(ctx, node_id, n, block); break;
+    case ARC_NODE_BREAK_IF:    break; /* handled inside lower_stmt_cycle */
     case ARC_NODE_SEQUENCE: case ARC_NODE_PARAM: break;
     case ARC_NODE_FUNC_CALL:   lower_stmt_as_expr(ctx, node_id, n, block); break;
     default:
@@ -308,23 +322,23 @@ static void lower_function(SemCtx* ctx, ArcNodeId func_node_id) {
 
     register_func(ctx, hf->name, func_idx);
 
-    SemScope saved_scope = ctx->scope;
-    scope_init(&ctx->scope);
-    scope_push(&ctx->scope);
+    ArcScope saved_scope = ctx->scope;
+    arc_scope_init(&ctx->scope);
+    arc_scope_push(&ctx->scope);
 
     if (body_rid != ARC_INVALID_ID && body_rid < ctx->graph->region_count) {
         const ArcRegion* body = &ctx->graph->regions[body_rid];
         for (uint32_t i = 0; i < body->member_count; i++) {
             const ArcNode* member = &ctx->graph->nodes[body->members[i]];
             if (member->kind == ARC_NODE_PARAM)
-                scope_add(&ctx->scope, member->attr.name);
+                arc_scope_add(&ctx->scope, member->attr.name);
         }
     }
 
     lower_region_stmts(ctx, body_rid, &hf->body);
     hf->local_count = ctx->scope.local_count;
 
-    scope_pop(&ctx->scope);
+    arc_scope_pop(&ctx->scope);
     ctx->scope = saved_scope;
 }
 
@@ -410,15 +424,15 @@ ArcSemanticResult arc_semantic_lower(const ArcGraph* graph) {
     ctx.diags = &result.diagnostics;
     ctx.had_error = false;
     ctx.func_table_count = 0;
-    scope_init(&ctx.scope);
+    arc_scope_init(&ctx.scope);
 
     phase_prescan_funcs(&ctx);
     phase_lower_funcs(&ctx);
 
-    scope_push(&ctx.scope);
+    arc_scope_push(&ctx.scope);
     phase_lower_root(&ctx, &result.module.main_body);
     phase_lower_output(&ctx, &result.module.main_body);
-    scope_pop(&ctx.scope);
+    arc_scope_pop(&ctx.scope);
 
     result.success = !ctx.had_error;
     return result;
