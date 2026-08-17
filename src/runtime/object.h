@@ -14,6 +14,11 @@ typedef enum {
     OBJ_CLOSURE,
     OBJ_UPVALUE,
     OBJ_RECORD,
+    OBJ_BITVEC,
+    OBJ_COROUTINE,
+    OBJ_THREAD,
+    OBJ_MUTEX,
+    OBJ_CHANNEL,
 } ArcObjType;
 
 /* --- Common object header --- */
@@ -69,6 +74,12 @@ typedef struct {
     uint16_t   field_cap;
 } ArcObjRecord;
 
+typedef struct {
+    ArcObject  obj;
+    uint8_t*   bits;        /* packed bit storage */
+    uint32_t   bit_count;   /* number of bits */
+} ArcObjBitvec;
+
 /* --- Type checking macros --- */
 #define ARC_IS_OBJ(val)      ((val).tag == VAL_OBJ)
 #define ARC_OBJ_TYPE(obj)    (((ArcObject*)(obj))->type)
@@ -77,6 +88,11 @@ typedef struct {
 #define ARC_IS_MAP(val)      (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_MAP)
 #define ARC_IS_CLOSURE(val)  (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_CLOSURE)
 #define ARC_IS_RECORD(val)   (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_RECORD)
+#define ARC_IS_BITVEC(val)   (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_BITVEC)
+#define ARC_IS_COROUTINE(val) (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_COROUTINE)
+#define ARC_IS_THREAD(val)    (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_THREAD)
+#define ARC_IS_MUTEX(val)     (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_MUTEX)
+#define ARC_IS_CHANNEL(val)   (ARC_IS_OBJ(val) && ARC_OBJ_TYPE((val).as.obj) == OBJ_CHANNEL)
 
 /* --- Cast macros (from ArcValue) --- */
 #define ARC_AS_STRING(val)   ((ArcObjString*)((val).as.obj))
@@ -85,6 +101,7 @@ typedef struct {
 #define ARC_AS_CLOSURE(val)  ((ArcObjClosure*)((val).as.obj))
 #define ARC_AS_UPVALUE(val)  ((ArcObjUpvalue*)((val).as.obj))
 #define ARC_AS_RECORD(val)   ((ArcObjRecord*)((val).as.obj))
+#define ARC_AS_BITVEC(val)   ((ArcObjBitvec*)((val).as.obj))
 
 /* --- Object constructors (allocate via GC) --- */
 ArcObjString*  arc_obj_string_new(ArcGC* gc, const char* data, uint32_t len);
@@ -99,6 +116,8 @@ ArcObjUpvalue* arc_obj_upvalue_new(ArcGC* gc, ArcValue* slot);
 ArcObjRecord*  arc_obj_record_new(ArcGC* gc, const char* type_name, uint16_t field_count);
 bool           arc_obj_record_set(ArcObjRecord* rec, const char* field, ArcValue val);
 bool           arc_obj_record_get(ArcObjRecord* rec, const char* field, ArcValue* out);
+ArcObjBitvec*  arc_obj_bitvec_new(ArcGC* gc, uint32_t bit_count);
+uint32_t       arc_obj_bitvec_popcount(ArcObjBitvec* bv);
 
 /* --- Object utilities --- */
 void        arc_obj_print(ArcObject* obj, FILE* out);

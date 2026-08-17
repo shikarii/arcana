@@ -22,7 +22,7 @@ ArcStatus vm_exec_arithmetic(ArcVm* vm, uint8_t op) {
         } else if (a.tag == VAL_F64 && b.tag == VAL_F64) {
             if (!vm_push(vm, arc_val_f64(a.as.f64 + b.as.f64))) return ARC_ERR_RUNTIME;
         } else if (ARC_IS_STRING(a) && ARC_IS_STRING(b)) {
-            ArcObjString* r = arc_obj_string_concat(&vm->gc, ARC_AS_STRING(a), ARC_AS_STRING(b));
+            ArcObjString* r = arc_obj_string_concat(vm->gc, ARC_AS_STRING(a), ARC_AS_STRING(b));
             if (!vm_push(vm, arc_val_obj((ArcObject*)r))) return ARC_ERR_RUNTIME;
         } else { vm_error(vm, "add: type mismatch"); return ARC_ERR_RUNTIME; }
         return ARC_OK;
@@ -143,10 +143,10 @@ ArcStatus vm_exec_string_ops(ArcVm* vm, uint8_t op) {
         if (start < 0) start = 0;
         if (end > (int64_t)s->len) end = s->len;
         if (start >= end) {
-            ArcObjString* empty = arc_obj_string_new(&vm->gc, "", 0);
+            ArcObjString* empty = arc_obj_string_new(vm->gc, "", 0);
             if (!vm_push(vm, arc_val_obj((ArcObject*)empty))) return ARC_ERR_RUNTIME;
         } else {
-            ArcObjString* sub = arc_obj_string_new(&vm->gc, s->data + start, (uint32_t)(end - start));
+            ArcObjString* sub = arc_obj_string_new(vm->gc, s->data + start, (uint32_t)(end - start));
             if (!vm_push(vm, arc_val_obj((ArcObject*)sub))) return ARC_ERR_RUNTIME;
         }
         return ARC_OK;
@@ -163,7 +163,7 @@ ArcStatus vm_exec_string_ops(ArcVm* vm, uint8_t op) {
             vm_error(vm, "str_index: index %lld out of bounds (len=%u)", (long long)idx, s->len);
             return ARC_ERR_RUNTIME;
         }
-        ArcObjString* ch = arc_obj_string_new(&vm->gc, s->data + idx, 1);
+        ArcObjString* ch = arc_obj_string_new(vm->gc, s->data + idx, 1);
         if (!vm_push(vm, arc_val_obj((ArcObject*)ch))) return ARC_ERR_RUNTIME;
         return ARC_OK;
     }
@@ -215,7 +215,7 @@ ArcStatus vm_exec_bitwise(ArcVm* vm, uint8_t op) {
 
 static ArcStatus vm_exec_array_new(ArcVm* vm) {
     uint16_t count = vm_read_u16(vm);
-    ArcObjArray* arr = arc_obj_array_new(&vm->gc, count > 0 ? count : 8);
+    ArcObjArray* arr = arc_obj_array_new(vm->gc, count > 0 ? count : 8);
     for (uint16_t i = 0; i < count; i++) {
         ArcValue item; if (!vm_pop(vm, &item)) return ARC_ERR_RUNTIME;
         arc_obj_array_push(arr, item);
@@ -246,7 +246,7 @@ static ArcStatus vm_exec_index_get(ArcVm* vm) {
         ArcObjString* s = ARC_AS_STRING(container);
         int64_t idx = key.as.i64;
         if (idx < 0 || idx >= (int64_t)s->len) { vm_error(vm, "index_get: string index out of bounds"); return ARC_ERR_RUNTIME; }
-        ArcObjString* ch = arc_obj_string_new(&vm->gc, s->data + idx, 1);
+        ArcObjString* ch = arc_obj_string_new(vm->gc, s->data + idx, 1);
         if (!vm_push(vm, arc_val_obj((ArcObject*)ch))) return ARC_ERR_RUNTIME;
     } else { vm_error(vm, "index_get: not indexable"); return ARC_ERR_RUNTIME; }
     return ARC_OK;
@@ -278,7 +278,7 @@ static ArcStatus vm_exec_length(ArcVm* vm) {
 
 static ArcStatus vm_exec_map_new(ArcVm* vm) {
     uint16_t pair_count = vm_read_u16(vm);
-    ArcObjMap* map = arc_obj_map_new(&vm->gc, pair_count > 0 ? pair_count : 8);
+    ArcObjMap* map = arc_obj_map_new(vm->gc, pair_count > 0 ? pair_count : 8);
     for (uint16_t i = 0; i < pair_count; i++) {
         ArcValue val, key;
         if (!vm_pop(vm, &val) || !vm_pop(vm, &key)) return ARC_ERR_RUNTIME;
@@ -294,7 +294,7 @@ static ArcStatus vm_exec_record_new(ArcVm* vm) {
     if (name_idx < vm->image->constants.count &&
         vm->image->constants.entries[name_idx].tag == ARC_CONST_STRING)
         name = vm->image->constants.entries[name_idx].as.str.data;
-    ArcObjRecord* rec = arc_obj_record_new(&vm->gc, name, 4);
+    ArcObjRecord* rec = arc_obj_record_new(vm->gc, name, 4);
     if (!vm_push(vm, arc_val_obj((ArcObject*)rec))) return ARC_ERR_RUNTIME;
     return ARC_OK;
 }
@@ -351,7 +351,7 @@ static ArcStatus vm_exec_closure_new(ArcVm* vm) {
         vm_error(vm, "closure: invalid function index %u", func_idx); return ARC_ERR_RUNTIME;
     }
     const ArcFuncRecord* fn = &vm->image->functions.funcs[func_idx];
-    ArcObjClosure* cl = arc_obj_closure_new(&vm->gc, func_idx, fn->upvalue_count);
+    ArcObjClosure* cl = arc_obj_closure_new(vm->gc, func_idx, fn->upvalue_count);
     for (uint8_t i = 0; i < fn->upvalue_count; i++) {
         const ArcUpvalueDesc* desc = &fn->upvalues[i];
         if (desc->is_local) {
@@ -360,7 +360,7 @@ static ArcStatus vm_exec_closure_new(ArcVm* vm) {
             ArcObjUpvalue* uv = vm->open_upvalues;
             while (uv && uv->location != slot) uv = uv->next;
             if (!uv) {
-                uv = arc_obj_upvalue_new(&vm->gc, slot);
+                uv = arc_obj_upvalue_new(vm->gc, slot);
                 uv->next = vm->open_upvalues;
                 vm->open_upvalues = uv;
             }
@@ -455,7 +455,7 @@ static ArcStatus vm_intr_type(ArcVm* vm) {
     case VAL_OBJ:  tn = arc_obj_type_name(ARC_OBJ_TYPE(v.as.obj)); break;
     default:       tn = "unknown"; break;
     }
-    ArcObjString* s = arc_obj_string_new(&vm->gc, tn, (uint32_t)strlen(tn));
+    ArcObjString* s = arc_obj_string_new(vm->gc, tn, (uint32_t)strlen(tn));
     if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
     return ARC_OK;
 }
@@ -465,25 +465,25 @@ static ArcStatus vm_intr_tostring(ArcVm* vm) {
     char buf[64];
     switch (v.tag) {
     case VAL_NULL: {
-        ArcObjString* s = arc_obj_string_new(&vm->gc, "null", 4);
+        ArcObjString* s = arc_obj_string_new(vm->gc, "null", 4);
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
     case VAL_BOOL: {
         const char* t = v.as.b ? "true" : "false";
-        ArcObjString* s = arc_obj_string_new(&vm->gc, t, (uint32_t)strlen(t));
+        ArcObjString* s = arc_obj_string_new(vm->gc, t, (uint32_t)strlen(t));
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
     case VAL_I64: {
         int n = snprintf(buf, sizeof(buf), "%lld", (long long)v.as.i64);
-        ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
+        ArcObjString* s = arc_obj_string_new(vm->gc, buf, (uint32_t)n);
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
     case VAL_F64: {
         int n = snprintf(buf, sizeof(buf), "%g", v.as.f64);
-        ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
+        ArcObjString* s = arc_obj_string_new(vm->gc, buf, (uint32_t)n);
         if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         break;
     }
@@ -492,7 +492,7 @@ static ArcStatus vm_intr_tostring(ArcVm* vm) {
         else {
             const char* t = arc_obj_type_name(ARC_OBJ_TYPE(v.as.obj));
             int n = snprintf(buf, sizeof(buf), "<%s>", t);
-            ArcObjString* s = arc_obj_string_new(&vm->gc, buf, (uint32_t)n);
+            ArcObjString* s = arc_obj_string_new(vm->gc, buf, (uint32_t)n);
             if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         }
         break;
@@ -523,7 +523,7 @@ static ArcStatus vm_intr_keys(ArcVm* vm) {
     ArcValue v; if (!vm_pop(vm, &v)) return ARC_ERR_RUNTIME;
     if (!ARC_IS_MAP(v)) { vm_error(vm, "keys: not a map"); return ARC_ERR_RUNTIME; }
     ArcObjMap* map = ARC_AS_MAP(v);
-    ArcObjArray* arr = arc_obj_array_new(&vm->gc, map->count);
+    ArcObjArray* arr = arc_obj_array_new(vm->gc, map->count);
     for (int32_t i = 0; i < map->count; i++)
         arc_obj_array_push(arr, map->keys[i]);
     if (!vm_push(vm, arc_val_obj((ArcObject*)arr))) return ARC_ERR_RUNTIME;
@@ -559,7 +559,7 @@ ArcStatus vm_exec_intrinsic(ArcVm* vm) {
         if (fgets(line, sizeof(line), stdin)) {
             size_t len = strlen(line);
             if (len > 0 && line[len-1] == '\n') line[--len] = '\0';
-            ArcObjString* s = arc_obj_string_new(&vm->gc, line, (uint32_t)len);
+            ArcObjString* s = arc_obj_string_new(vm->gc, line, (uint32_t)len);
             if (!vm_push(vm, arc_val_obj((ArcObject*)s))) return ARC_ERR_RUNTIME;
         } else { if (!vm_push(vm, arc_val_null())) return ARC_ERR_RUNTIME; }
         return ARC_OK;

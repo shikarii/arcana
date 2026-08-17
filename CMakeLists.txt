@@ -38,7 +38,7 @@ add_library(arcana_common STATIC src/common/arena.c)
 target_include_directories(arcana_common PUBLIC src)
 list(APPEND ARCANA_LIBS arcana_common)
 
-add_library(arcana_platform STATIC src/platform/platform.c)
+add_library(arcana_platform STATIC src/platform/platform.c src/platform/thread.c)
 target_include_directories(arcana_platform PUBLIC src)
 list(APPEND ARCANA_LIBS arcana_platform)
 
@@ -46,11 +46,14 @@ add_library(arcana_bytecode STATIC src/bytecode/format.c src/bytecode/disassembl
 target_include_directories(arcana_bytecode PUBLIC src)
 list(APPEND ARCANA_LIBS arcana_bytecode)
 
-add_library(arcana_runtime STATIC src/runtime/object.c src/runtime/gc.c src/vm/value_ops.c)
+add_library(arcana_runtime STATIC
+    src/runtime/object.c src/runtime/gc.c src/runtime/concurrency.c
+    src/vm/value_ops.c)
 target_include_directories(arcana_runtime PUBLIC src)
+target_link_libraries(arcana_runtime PUBLIC arcana_platform)
 list(APPEND ARCANA_LIBS arcana_runtime)
 
-add_library(arcana_vm STATIC src/vm/vm.c src/vm/vm_ops.c)
+add_library(arcana_vm STATIC src/vm/vm.c src/vm/vm_ops.c src/vm/vm_concurrency.c)
 target_link_libraries(arcana_vm PUBLIC arcana_bytecode arcana_runtime)
 list(APPEND ARCANA_LIBS arcana_vm)
 
@@ -120,6 +123,7 @@ add_executable(arcana_tests
     tests/test_service.c
     tests/test_challenge_L1.c
     tests/test_const_fold.c
+    tests/test_concurrency.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode

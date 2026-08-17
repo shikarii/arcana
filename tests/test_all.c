@@ -524,6 +524,32 @@ static void run_challenge_L1_tests(void) {
     RUN(test_L1_16_linked_list);
 }
 
+/* --- test_concurrency.c --- */
+extern void test_coro_create(void);
+extern void test_coro_yield_resume(void);
+extern void test_coro_completion(void);
+extern void test_coro_resume_dead(void);
+extern void test_mutex_basic(void);
+extern void test_channel_basic(void);
+extern void test_channel_wrap(void);
+extern void test_gc_coro_tracing(void);
+extern void test_concurrency_opcodes(void);
+extern void test_concurrency_type_names(void);
+
+static void run_concurrency_tests(void) {
+    printf("\n[Concurrency]\n");
+    RUN(test_concurrency_opcodes);
+    RUN(test_concurrency_type_names);
+    RUN(test_coro_create);
+    RUN(test_coro_yield_resume);
+    RUN(test_coro_completion);
+    RUN(test_coro_resume_dead);
+    RUN(test_mutex_basic);
+    RUN(test_channel_basic);
+    RUN(test_channel_wrap);
+    RUN(test_gc_coro_tracing);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -545,6 +571,7 @@ int main(void) {
     run_challenge_L0_tests();
     run_service_tests();
     run_challenge_L1_tests();
+    run_concurrency_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);
