@@ -88,6 +88,13 @@ add_library(arcana_interpreter STATIC src/interpreter/interpreter.c)
 target_link_libraries(arcana_interpreter PUBLIC arcana_semantic_graph)
 list(APPEND ARCANA_LIBS arcana_interpreter)
 
+add_library(arcana_service STATIC src/service/arcana_service.c)
+target_link_libraries(arcana_service PUBLIC
+    arcana_semantic_graph arcana_compiler arcana_typecheck
+    arcana_verifier arcana_vm arcana_bytecode
+    arcana_hir arcana_mir arcana_semantic)
+list(APPEND ARCANA_LIBS arcana_service)
+
 # Apply -Wmissing-prototypes to all library targets (not tests)
 foreach(lib ${ARCANA_LIBS})
     target_compile_options(${lib} PRIVATE ${ARCANA_LIB_STRICT})
@@ -109,6 +116,9 @@ add_executable(arcana_tests
     tests/test_error_recovery.c
     tests/test_cycle.c
     tests/test_closures.c
+    tests/test_challenge_L0.c
+    tests/test_service.c
+    tests/test_challenge_L1.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode
@@ -118,6 +128,7 @@ target_link_libraries(arcana_tests
     arcana_compiler
     arcana_typecheck
     arcana_interpreter
+    arcana_service
     arcana_hir
     arcana_mir
     arcana_semantic

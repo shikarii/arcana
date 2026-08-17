@@ -1,0 +1,30 @@
+; Level 0.05: Basic loop (count to 10)
+; let i = 0; while (i < 10) { i = i + 1 }; result = i
+; Expected result: i64(10)
+region r0 module
+region r_body cycle parent=r0
+node n_init const_int(0) in r0
+node n_let let(i) in r0
+edge e0 n_init.out -> n_let.value
+node n_cycle cycle in r0 body_region=r_body
+; break when i >= 10 (i.e., not(i < 10))
+node ref1 var_ref(i) in r_body
+node c10 const_int(10) in r_body
+node cmp lt in r_body
+edge e1 ref1.out -> cmp.lhs
+edge e2 c10.out -> cmp.rhs
+node inv not in r_body
+edge e3 cmp.out -> inv.value
+node brk break_if in r_body
+edge e4 inv.out -> brk.cond
+; i = i + 1
+node ref2 var_ref(i) in r_body
+node c1 const_int(1) in r_body
+node inc add in r_body
+edge e5 ref2.out -> inc.lhs
+edge e6 c1.out -> inc.rhs
+node asgn assign(i) in r_body
+edge e7 inc.out -> asgn.value
+; After loop
+node nref var_ref(i) in r0
+root nref.out

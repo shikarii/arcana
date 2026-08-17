@@ -371,8 +371,14 @@ void compile_function(Compiler* c, ArcNodeId func_node_id) {
     c->local_count = 0; c->stack_depth = 0; c->max_stack = 0;
     uint16_t name_ci = arc_const_pool_add_string(&c->image.constants,
         fn->attr.func.name, (uint32_t)strlen(fn->attr.func.name));
-    uint16_t fi = arc_func_table_add(&c->image.functions,
-        (ArcFuncRecord){ .name_const_idx = name_ci, .arity = fn->attr.func.arity });
+    /* Check if already pre-registered (mutual recursion support) */
+    uint16_t fi = UINT16_MAX;
+    for (uint16_t k = 0; k < c->image.functions.count; k++) {
+        if (c->image.functions.funcs[k].name_const_idx == name_ci) { fi = k; break; }
+    }
+    if (fi == UINT16_MAX)
+        fi = arc_func_table_add(&c->image.functions,
+            (ArcFuncRecord){ .name_const_idx = name_ci, .arity = fn->attr.func.arity });
     c->debug_func_idx = fi;
     ArcRegionId body_rid = fn->attr.func.body_region;
     const ArcRegion* body = &c->graph->regions[body_rid];

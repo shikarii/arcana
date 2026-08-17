@@ -1,0 +1,35 @@
+; Level 0.07: Nested function calls
+; def double(x): return x * 2
+; def add_one(x): return x + 1
+; result = add_one(double(10)) = add_one(20) = 21
+; Expected result: i64(21)
+region r0 module
+region rb1 function parent=r0
+region rb2 function parent=r0
+; def double(x): return x * 2
+node fd1 func_def(double) in r0 body_region=rb1 arity=1
+node p1 param(x) in rb1
+node xr1 var_ref(x) in rb1
+node c2 const_int(2) in rb1
+node m0 mul in rb1
+edge e0 xr1.out -> m0.lhs
+edge e1 c2.out -> m0.rhs
+node ret1 return in rb1
+edge e2 m0.out -> ret1.value
+; def add_one(x): return x + 1
+node fd2 func_def(add_one) in r0 body_region=rb2 arity=1
+node p2 param(x) in rb2
+node xr2 var_ref(x) in rb2
+node c1 const_int(1) in rb2
+node a0 add in rb2
+edge e3 xr2.out -> a0.lhs
+edge e4 c1.out -> a0.rhs
+node ret2 return in rb2
+edge e5 a0.out -> ret2.value
+; Call add_one(double(10))
+node c10 const_int(10) in r0
+node call1 func_call(double) in r0
+edge e6 c10.out -> call1.arg0
+node call2 func_call(add_one) in r0
+edge e7 call1.out -> call2.arg0
+root call2.out

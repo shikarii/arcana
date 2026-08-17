@@ -1,0 +1,68 @@
+; Level 1.06: Collatz sequence length
+; Count steps from 27 to reach 1 via: if even n/2, if odd 3n+1
+; Collatz(27) = 111 steps
+; Expected result: i64(111)
+region r0 module
+region rl cycle parent=r0
+region rt then parent=rl
+region re else parent=rl
+; let n = 27, steps = 0
+node c27 const_int(27) in r0
+node ln let(n) in r0
+edge e0 c27.out -> ln.value
+node c0 const_int(0) in r0
+node lst let(steps) in r0
+edge e1 c0.out -> lst.value
+; cycle
+node cyc cycle in r0 body_region=rl
+; break if n == 1
+node nr1 var_ref(n) in rl
+node c1a const_int(1) in rl
+node ceq eq in rl
+edge e2 nr1.out -> ceq.lhs
+edge e3 c1a.out -> ceq.rhs
+node brk break_if in rl
+edge e4 ceq.out -> brk.cond
+; if n%2 == 0
+node nr2 var_ref(n) in rl
+node c2 const_int(2) in rl
+node md mod in rl
+edge e5 nr2.out -> md.lhs
+edge e6 c2.out -> md.rhs
+node c0b const_int(0) in rl
+node ceq2 eq in rl
+edge e7 md.out -> ceq2.lhs
+edge e8 c0b.out -> ceq2.rhs
+node nif if in rl then_region=rt else_region=re
+edge e9 ceq2.out -> nif.cond
+; then: n = n / 2
+node nr3 var_ref(n) in rt
+node c2b const_int(2) in rt
+node dv div in rt
+edge e10 nr3.out -> dv.lhs
+edge e11 c2b.out -> dv.rhs
+node an1 assign(n) in rt
+edge e12 dv.out -> an1.value
+; else: n = 3*n + 1
+node nr4 var_ref(n) in re
+node c3 const_int(3) in re
+node ml mul in re
+edge e13 nr4.out -> ml.lhs
+edge e14 c3.out -> ml.rhs
+node c1b const_int(1) in re
+node ad add in re
+edge e15 ml.out -> ad.lhs
+edge e16 c1b.out -> ad.rhs
+node an2 assign(n) in re
+edge e17 ad.out -> an2.value
+; steps = steps + 1
+node sr var_ref(steps) in rl
+node c1c const_int(1) in rl
+node inc add in rl
+edge e18 sr.out -> inc.lhs
+edge e19 c1c.out -> inc.rhs
+node as assign(steps) in rl
+edge e20 inc.out -> as.value
+; result
+node sref var_ref(steps) in r0
+root sref.out

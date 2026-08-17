@@ -422,6 +422,80 @@ static void run_closure_tests(void) {
     RUN(test_closure_target_skipped);
 }
 
+/* --- test_challenge_L0.c --- */
+extern void test_L0_01_constant(void);
+extern void test_L0_02_addition(void);
+extern void test_L0_03_arithmetic(void);
+extern void test_L0_04_branch(void);
+extern void test_L0_05_loop(void);
+extern void test_L0_06_function(void);
+extern void test_L0_07_nested_calls(void);
+extern void test_L0_08_fib_recursive(void);
+extern void test_L0_09_fib_iterative(void);
+extern void test_L0_10_stress(void);
+extern void test_L0_11_comparisons(void);
+extern void test_L0_12_invalid_rejection(void);
+
+static void run_challenge_L0_tests(void) {
+    printf("\n[Challenge Corpus Level 0: Machine Sanity]\n");
+    RUN(test_L0_01_constant);
+    RUN(test_L0_02_addition);
+    RUN(test_L0_03_arithmetic);
+    RUN(test_L0_04_branch);
+    RUN(test_L0_05_loop);
+    RUN(test_L0_06_function);
+    RUN(test_L0_07_nested_calls);
+    RUN(test_L0_08_fib_recursive);
+    RUN(test_L0_09_fib_iterative);
+    RUN(test_L0_10_stress);
+    RUN(test_L0_11_comparisons);
+    RUN(test_L0_12_invalid_rejection);
+}
+
+/* --- test_service.c --- */
+extern void test_service_run_ok(void);
+extern void test_service_run_add(void);
+extern void test_service_run_parse_fail(void);
+extern void test_service_check_ok(void);
+extern void test_service_compile_ok(void);
+extern void test_service_check_parse_fail(void);
+extern void test_service_diagnostics(void);
+extern void test_service_error_empty_on_success(void);
+
+static void run_service_tests(void) {
+    printf("\n[Tooling Service API]\n");
+    RUN(test_service_run_ok);
+    RUN(test_service_run_add);
+    RUN(test_service_run_parse_fail);
+    RUN(test_service_check_ok);
+    RUN(test_service_compile_ok);
+    RUN(test_service_check_parse_fail);
+    RUN(test_service_diagnostics);
+    RUN(test_service_error_empty_on_success);
+}
+
+/* --- test_challenge_L1.c --- */
+extern void test_L1_01_factorial(void);
+extern void test_L1_02_gcd(void);
+extern void test_L1_03_power(void);
+extern void test_L1_04_fizzbuzz(void);
+extern void test_L1_05_sum_squares(void);
+extern void test_L1_06_collatz(void);
+extern void test_L1_07_is_prime(void);
+extern void test_L1_08_mutual_recursion(void);
+
+static void run_challenge_L1_tests(void) {
+    printf("\n[Challenge Corpus Level 1: Classic Algorithms]\n");
+    RUN(test_L1_01_factorial);
+    RUN(test_L1_02_gcd);
+    RUN(test_L1_03_power);
+    RUN(test_L1_04_fizzbuzz);
+    RUN(test_L1_05_sum_squares);
+    RUN(test_L1_06_collatz);
+    RUN(test_L1_07_is_prime);
+    RUN(test_L1_08_mutual_recursion);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -440,6 +514,9 @@ int main(void) {
     run_error_recovery_tests();
     run_cycle_tests();
     run_closure_tests();
+    run_challenge_L0_tests();
+    run_service_tests();
+    run_challenge_L1_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

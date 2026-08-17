@@ -1,0 +1,20 @@
+; Level 0.06: Function call
+; def double(x): return x * 2
+; result = double(21) = 42
+; Expected result: i64(42)
+region r0 module
+region r_body function parent=r0
+node fdef func_def(double) in r0 body_region=r_body arity=1
+node p0 param(x) in r_body
+node xref var_ref(x) in r_body
+node c2 const_int(2) in r_body
+node m0 mul in r_body
+edge e0 xref.out -> m0.lhs
+edge e1 c2.out -> m0.rhs
+node ret return in r_body
+edge e2 m0.out -> ret.value
+; Call double(21)
+node c21 const_int(21) in r0
+node call func_call(double) in r0
+edge e3 c21.out -> call.arg0
+root call.out

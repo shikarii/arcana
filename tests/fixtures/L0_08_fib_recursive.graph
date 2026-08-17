@@ -1,0 +1,48 @@
+; Level 0.08: Recursive Fibonacci
+; def fib(n): if n <= 1 return n; return fib(n-1) + fib(n-2)
+; result = fib(10) = 55
+; Expected result: i64(55)
+region r0 module
+region rb function parent=r0
+region rt then parent=rb
+region re else parent=rb
+; def fib(n)
+node fdef func_def(fib) in r0 body_region=rb arity=1
+node p0 param(n) in rb
+; if n <= 1
+node nr1 var_ref(n) in rb
+node c1a const_int(1) in rb
+node cmp le in rb
+edge e0 nr1.out -> cmp.lhs
+edge e1 c1a.out -> cmp.rhs
+node nif if in rb then_region=rt else_region=re
+edge e2 cmp.out -> nif.cond
+; then: return n
+node nr2 var_ref(n) in rt
+node ret1 return in rt
+edge e3 nr2.out -> ret1.value
+; else: return fib(n-1) + fib(n-2)
+node nr3 var_ref(n) in re
+node c1b const_int(1) in re
+node s1 sub in re
+edge e4 nr3.out -> s1.lhs
+edge e5 c1b.out -> s1.rhs
+node call1 func_call(fib) in re
+edge e6 s1.out -> call1.arg0
+node nr4 var_ref(n) in re
+node c2 const_int(2) in re
+node s2 sub in re
+edge e7 nr4.out -> s2.lhs
+edge e8 c2.out -> s2.rhs
+node call2 func_call(fib) in re
+edge e9 s2.out -> call2.arg0
+node sum add in re
+edge e10 call1.out -> sum.lhs
+edge e11 call2.out -> sum.rhs
+node ret2 return in re
+edge e12 sum.out -> ret2.value
+; Call fib(10)
+node c10 const_int(10) in r0
+node call0 func_call(fib) in r0
+edge e13 c10.out -> call0.arg0
+root call0.out

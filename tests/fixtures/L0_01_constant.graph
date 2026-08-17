@@ -1,0 +1,5 @@
+; Level 0.01: Constant 42
+; Expected result: 42
+region r0 module
+node n0 const_int(42) in r0
+root n0.out

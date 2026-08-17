@@ -1,0 +1,63 @@
+; Level 1.08: Mutual recursion (is_even/is_odd)
+; def is_even(n): if n==0 return 1; return is_odd(n-1)
+; def is_odd(n): if n==0 return 0; return is_even(n-1)
+; is_even(10) = 1
+; Expected result: i64(1)
+region r0 module
+region rb1 function parent=r0
+region rt1 then parent=rb1
+region re1 else parent=rb1
+region rb2 function parent=r0
+region rt2 then parent=rb2
+region re2 else parent=rb2
+; def is_even(n)
+node fd1 func_def(is_even) in r0 body_region=rb1 arity=1
+node p1 param(n) in rb1
+node nr1 var_ref(n) in rb1
+node c0a const_int(0) in rb1
+node eq1 eq in rb1
+edge e0 nr1.out -> eq1.lhs
+edge e1 c0a.out -> eq1.rhs
+node if1 if in rb1 then_region=rt1 else_region=re1
+edge e2 eq1.out -> if1.cond
+node c1a const_int(1) in rt1
+node ret1 return in rt1
+edge e3 c1a.out -> ret1.value
+; else: return is_odd(n-1)
+node nr2 var_ref(n) in re1
+node c1b const_int(1) in re1
+node s1 sub in re1
+edge e4 nr2.out -> s1.lhs
+edge e5 c1b.out -> s1.rhs
+node call1 func_call(is_odd) in re1
+edge e6 s1.out -> call1.arg0
+node ret2 return in re1
+edge e7 call1.out -> ret2.value
+; def is_odd(n)
+node fd2 func_def(is_odd) in r0 body_region=rb2 arity=1
+node p2 param(n) in rb2
+node nr3 var_ref(n) in rb2
+node c0b const_int(0) in rb2
+node eq2 eq in rb2
+edge e8 nr3.out -> eq2.lhs
+edge e9 c0b.out -> eq2.rhs
+node if2 if in rb2 then_region=rt2 else_region=re2
+edge e10 eq2.out -> if2.cond
+node c0c const_int(0) in rt2
+node ret3 return in rt2
+edge e11 c0c.out -> ret3.value
+; else: return is_even(n-1)
+node nr4 var_ref(n) in re2
+node c1c const_int(1) in re2
+node s2 sub in re2
+edge e12 nr4.out -> s2.lhs
+edge e13 c1c.out -> s2.rhs
+node call2 func_call(is_even) in re2
+edge e14 s2.out -> call2.arg0
+node ret4 return in re2
+edge e15 call2.out -> ret4.value
+; Call is_even(10)
+node c10 const_int(10) in r0
+node call0 func_call(is_even) in r0
+edge e16 c10.out -> call0.arg0
+root call0.out

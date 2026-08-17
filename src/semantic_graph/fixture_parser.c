@@ -313,6 +313,10 @@ static void set_node_attr(ArcNode* n, ArcNodeKind kind, const char* attr_buf) {
     case ARC_NODE_LET: case ARC_NODE_VAR_REF: case ARC_NODE_ASSIGN:
     case ARC_NODE_PARAM:
         n->attr.name = arc_strdup(attr_buf); break;
+    case ARC_NODE_IF:
+        n->attr.branch.then_region = ARC_INVALID_ID;
+        n->attr.branch.else_region = ARC_INVALID_ID;
+        break;
     case ARC_NODE_FUNC_DEF:
         n->attr.func.name = arc_strdup(attr_buf);
         n->attr.func.arity = 0;
@@ -439,6 +443,7 @@ ArcFixtureResult arc_fixture_parse(const char* text) {
     result.success = true;
 
     arc_graph_init(&result.graph);
+    result.graph.owns_strings = true;
 
     ParseState state = {0};
     state.graph = &result.graph;
