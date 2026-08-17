@@ -1,0 +1,43 @@
+; Level 0.10: Stack-depth stress test
+; Deep expression tree: ((((((((1+1)+1)+1)+1)+1)+1)+1)+1)+1 = 10
+; Tests stack depth with 10 nested additions
+; Expected result: i64(10)
+region r0 module
+node c0 const_int(1) in r0
+node c1 const_int(1) in r0
+node a0 add in r0
+edge e0 c0.out -> a0.lhs
+edge e1 c1.out -> a0.rhs
+node c2 const_int(1) in r0
+node a1 add in r0
+edge e2 a0.out -> a1.lhs
+edge e3 c2.out -> a1.rhs
+node c3 const_int(1) in r0
+node a2 add in r0
+edge e4 a1.out -> a2.lhs
+edge e5 c3.out -> a2.rhs
+node c4 const_int(1) in r0
+node a3 add in r0
+edge e6 a2.out -> a3.lhs
+edge e7 c4.out -> a3.rhs
+node c5 const_int(1) in r0
+node a4 add in r0
+edge e8 a3.out -> a4.lhs
+edge e9 c5.out -> a4.rhs
+node c6 const_int(1) in r0
+node a5 add in r0
+edge e10 a4.out -> a5.lhs
+edge e11 c6.out -> a5.rhs
+node c7 const_int(1) in r0
+node a6 add in r0
+edge e12 a5.out -> a6.lhs
+edge e13 c7.out -> a6.rhs
+node c8 const_int(1) in r0
+node a7 add in r0
+edge e14 a6.out -> a7.lhs
+edge e15 c8.out -> a7.rhs
+node c9 const_int(1) in r0
+node a8 add in r0
+edge e16 a7.out -> a8.lhs
+edge e17 c9.out -> a8.rhs
+root a8.out

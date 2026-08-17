@@ -1,0 +1,24 @@
+; Level 0.04: Branch true/false
+; if (3 < 5) { result = 42 } else { result = 0 }
+; Expected result: i64(42)
+region r0 module
+region r_then then parent=r0
+region r_else else parent=r0
+node n_init const_int(0) in r0
+node n_let let(result) in r0
+edge e0 n_init.out -> n_let.value
+node n3 const_int(3) in r0
+node n5 const_int(5) in r0
+node nlt lt in r0
+edge e1 n3.out -> nlt.lhs
+edge e2 n5.out -> nlt.rhs
+node nif if in r0 then_region=r_then else_region=r_else
+edge e3 nlt.out -> nif.cond
+node n42 const_int(42) in r_then
+node asgn1 assign(result) in r_then
+edge e4 n42.out -> asgn1.value
+node n0v const_int(0) in r_else
+node asgn0 assign(result) in r_else
+edge e5 n0v.out -> asgn0.value
+node nref var_ref(result) in r0
+root nref.out

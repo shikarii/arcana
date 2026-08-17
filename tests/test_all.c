@@ -422,6 +422,36 @@ static void run_closure_tests(void) {
     RUN(test_closure_target_skipped);
 }
 
+/* --- test_challenge_L0.c --- */
+extern void test_L0_01_constant(void);
+extern void test_L0_02_addition(void);
+extern void test_L0_03_arithmetic(void);
+extern void test_L0_04_branch(void);
+extern void test_L0_05_loop(void);
+extern void test_L0_06_function(void);
+extern void test_L0_07_nested_calls(void);
+extern void test_L0_08_fib_recursive(void);
+extern void test_L0_09_fib_iterative(void);
+extern void test_L0_10_stress(void);
+extern void test_L0_11_comparisons(void);
+extern void test_L0_12_invalid_rejection(void);
+
+static void run_challenge_L0_tests(void) {
+    printf("\n[Challenge Corpus Level 0: Machine Sanity]\n");
+    RUN(test_L0_01_constant);
+    RUN(test_L0_02_addition);
+    RUN(test_L0_03_arithmetic);
+    RUN(test_L0_04_branch);
+    RUN(test_L0_05_loop);
+    RUN(test_L0_06_function);
+    RUN(test_L0_07_nested_calls);
+    RUN(test_L0_08_fib_recursive);
+    RUN(test_L0_09_fib_iterative);
+    RUN(test_L0_10_stress);
+    RUN(test_L0_11_comparisons);
+    RUN(test_L0_12_invalid_rejection);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -440,6 +470,7 @@ int main(void) {
     run_error_recovery_tests();
     run_cycle_tests();
     run_closure_tests();
+    run_challenge_L0_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

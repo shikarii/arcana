@@ -1,0 +1,32 @@
+; Level 0.03: Every arithmetic opcode
+; Computes ((3 + 7) * 2 - 5) / 3 % 3 = 2
+; Exercises: add, mul, sub, div, mod
+; Expected result: i64(2)
+region r0 module
+node c3a const_int(3) in r0
+node c7 const_int(7) in r0
+node a0 add in r0
+edge e0 c3a.out -> a0.lhs
+edge e1 c7.out -> a0.rhs
+; a0 = 10
+node c2 const_int(2) in r0
+node m0 mul in r0
+edge e2 a0.out -> m0.lhs
+edge e3 c2.out -> m0.rhs
+; m0 = 20
+node c5 const_int(5) in r0
+node s0 sub in r0
+edge e4 m0.out -> s0.lhs
+edge e5 c5.out -> s0.rhs
+; s0 = 15
+node c3b const_int(3) in r0
+node d0 div in r0
+edge e6 s0.out -> d0.lhs
+edge e7 c3b.out -> d0.rhs
+; d0 = 5
+node c3c const_int(3) in r0
+node r0m mod in r0
+edge e8 d0.out -> r0m.lhs
+edge e9 c3c.out -> r0m.rhs
+; r0m = 2
+root r0m.out

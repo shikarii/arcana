@@ -109,6 +109,7 @@ add_executable(arcana_tests
     tests/test_error_recovery.c
     tests/test_cycle.c
     tests/test_closures.c
+    tests/test_challenge_L0.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode
