@@ -194,6 +194,9 @@ typedef struct {
 
     /* Output node (what the program computes) */
     ArcNodeId    output_node;
+
+    /* If true, arc_graph_free frees strdup'd attr.name strings */
+    bool         owns_strings;
 } ArcGraph;
 
 /* === API === */

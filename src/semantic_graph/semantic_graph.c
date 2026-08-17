@@ -9,6 +9,15 @@ void arc_graph_init(ArcGraph* g) {
 
 void arc_graph_free(ArcGraph* g) {
     for (uint32_t i = 0; i < g->node_count; i++) {
+        if (g->owns_strings) {
+            ArcNodeKind k = g->nodes[i].kind;
+            if (k == ARC_NODE_LET || k == ARC_NODE_VAR_REF ||
+                k == ARC_NODE_ASSIGN || k == ARC_NODE_PARAM ||
+                k == ARC_NODE_FUNC_CALL)
+                ARC_FREE((void*)g->nodes[i].attr.name);
+            else if (k == ARC_NODE_FUNC_DEF)
+                ARC_FREE((void*)g->nodes[i].attr.func.name);
+        }
         ARC_FREE(g->nodes[i].ports);
         ARC_FREE(g->nodes[i].cyclic_order);
     }

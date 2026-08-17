@@ -443,6 +443,7 @@ ArcFixtureResult arc_fixture_parse(const char* text) {
     result.success = true;
 
     arc_graph_init(&result.graph);
+    result.graph.owns_strings = true;
 
     ParseState state = {0};
     state.graph = &result.graph;
