@@ -179,7 +179,7 @@ TEST(test_golden_disassembly) {
 
     ASSERT(strstr(buf, "main") != NULL);
     ASSERT(strstr(buf, "const") != NULL);
-    ASSERT(strstr(buf, "add") != NULL);
+    /* 5+10 is constant-folded to single const 15 — no add opcode */
     ASSERT(strstr(buf, "halt") != NULL);
 
     /* Determinism: recompile, binary output must match */

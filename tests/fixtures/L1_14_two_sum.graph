@@ -1,0 +1,123 @@
+; Level 1.14: Two Sum (O(n^2) brute force)
+; arr = [2, 7, 11, 15], target = 9
+; Find i+j where arr[i]+arr[j]=target
+; i=0, j=1 => return 0+1 = 1
+; Expected result: i64(1)
+region r0 module
+region fb function parent=r0
+region wob loop_body parent=fb
+region wib loop_body parent=wob
+region ift then parent=wib
+
+; def two_sum(arr, n, target):
+node fdef func_def(two_sum) in r0 body_region=fb arity=3
+node p_arr param(arr) in fb
+node p_n param(n) in fb
+node p_t param(target) in fb
+
+;   let i = 0
+node c0 const_int(0) in fb
+node li let(i) in fb
+edge e01 c0.out -> li.value
+
+;   let answer = -1
+node cm1 const_int(-1) in fb
+node lans let(answer) in fb
+edge e02 cm1.out -> lans.value
+
+;   while i < n:
+node vri var_ref(i) in fb
+node vrn1 var_ref(n) in fb
+node clt1 lt in fb
+edge e03 vri.out -> clt1.lhs
+edge e04 vrn1.out -> clt1.rhs
+node w1 while in fb body_region=wob
+edge e05 clt1.out -> w1.cond
+
+;     let j = i + 1
+node vri2 var_ref(i) in wob
+node c1a const_int(1) in wob
+node add1 add in wob
+edge e06 vri2.out -> add1.lhs
+edge e07 c1a.out -> add1.rhs
+node lj let(j) in wob
+edge e08 add1.out -> lj.value
+
+;     while j < n:
+node vrj var_ref(j) in wob
+node vrn2 var_ref(n) in wob
+node clt2 lt in wob
+edge e09 vrj.out -> clt2.lhs
+edge e10 vrn2.out -> clt2.rhs
+node w2 while in wob body_region=wib
+edge e11 clt2.out -> w2.cond
+
+;       if arr[i] + arr[j] == target: answer = i + j
+node vra1 var_ref(arr) in wib
+node vri3 var_ref(i) in wib
+node ig1 index_get in wib
+edge e12 vra1.out -> ig1.lhs
+edge e13 vri3.out -> ig1.rhs
+node vra2 var_ref(arr) in wib
+node vrj2 var_ref(j) in wib
+node ig2 index_get in wib
+edge e14 vra2.out -> ig2.lhs
+edge e15 vrj2.out -> ig2.rhs
+node add2 add in wib
+edge e16 ig1.out -> add2.lhs
+edge e17 ig2.out -> add2.rhs
+node vrt var_ref(target) in wib
+node ceq eq in wib
+edge e18 add2.out -> ceq.lhs
+edge e19 vrt.out -> ceq.rhs
+node iff if in wib then_region=ift
+edge e20 ceq.out -> iff.cond
+
+node vri4 var_ref(i) in ift
+node vrj3 var_ref(j) in ift
+node add3 add in ift
+edge e21 vri4.out -> add3.lhs
+edge e22 vrj3.out -> add3.rhs
+node aans assign(answer) in ift
+edge e23 add3.out -> aans.value
+
+;       j = j + 1
+node vrj4 var_ref(j) in wib
+node c1b const_int(1) in wib
+node add4 add in wib
+edge e24 vrj4.out -> add4.lhs
+edge e25 c1b.out -> add4.rhs
+node aj assign(j) in wib
+edge e26 add4.out -> aj.value
+
+;     i = i + 1
+node vri5 var_ref(i) in wob
+node c1c const_int(1) in wob
+node add5 add in wob
+edge e27 vri5.out -> add5.lhs
+edge e28 c1c.out -> add5.rhs
+node ai assign(i) in wob
+edge e29 add5.out -> ai.value
+
+;   return answer
+node vrans var_ref(answer) in fb
+node ret return in fb
+edge e30 vrans.out -> ret.value
+
+; main: [2, 7, 11, 15], target=9
+node v2 const_int(2) in r0
+node v7 const_int(7) in r0
+node v11 const_int(11) in r0
+node v15 const_int(15) in r0
+node arr array_literal in r0
+edge e31 v2.out -> arr.item0
+edge e32 v7.out -> arr.item1
+edge e33 v11.out -> arr.item2
+edge e34 v15.out -> arr.item3
+node c4 const_int(4) in r0
+node c9 const_int(9) in r0
+node call func_call(two_sum) in r0
+edge e35 arr.out -> call.arg0
+edge e36 c4.out -> call.arg1
+edge e37 c9.out -> call.arg2
+root call.out

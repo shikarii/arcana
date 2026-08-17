@@ -71,6 +71,9 @@ typedef enum {
     ARC_NODE_INTRINSIC_CALL,/* intrinsic function call */
     ARC_NODE_BREAK_IF,      /* exit nearest CYCLE region when cond is true */
     ARC_NODE_CYCLE,         /* topology-derived iteration: attr.cycle.body_region */
+    ARC_NODE_RECORD_NEW,    /* create empty record: attr.name = type_name */
+    ARC_NODE_FIELD_GET,     /* read record field: attr.name = field_name */
+    ARC_NODE_FIELD_SET,     /* write record field: attr.name = field_name */
 } ArcNodeKind;
 
 /* --- Port direction --- */

@@ -78,6 +78,10 @@
     X(OP_INDEX_SET,     0x62, 0, 3, 0, "index_set")     /* [container, key, value] → [] */ \
     X(OP_LENGTH,        0x63, 0, 1, 1, "length")        /* [container] → [i64] */ \
     X(OP_MAP_NEW,       0x64, 2, -1, 1, "map_new")      /* u16 pair_count */ \
+    /* --- Records --- */ \
+    X(OP_RECORD_NEW,    0x65, 2, 0, 1, "record_new")   /* u16 type_name_const_idx */ \
+    X(OP_FIELD_GET,     0x66, 2, 1, 1, "field_get")    /* u16 field_name_idx; [rec] → [val] */ \
+    X(OP_FIELD_SET,     0x67, 2, 2, 1, "field_set")    /* u16 field_name_idx; [rec, val] → [rec] */ \
     /* --- Intrinsics --- */ \
     X(OP_INTRINSIC,     0xF0, 4, -1, 0, "intrinsic")    /* u16 intrinsic_id, u8 argc */ \
     /* --- Control --- */ \

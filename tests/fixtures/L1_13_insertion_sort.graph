@@ -1,0 +1,140 @@
+; Level 1.13: Insertion sort
+; Sort [9,5,1,4,3] and return arr[2] (should be 4 after sort)
+; Expected result: i64(4)
+region r0 module
+region fb function parent=r0
+region wob loop_body parent=fb
+region wib loop_body parent=wob
+
+; def insertion_sort(arr, n):
+node fdef func_def(insertion_sort) in r0 body_region=fb arity=2
+node p_arr param(arr) in fb
+node p_n param(n) in fb
+
+;   let i = 1
+node c1 const_int(1) in fb
+node li let(i) in fb
+edge e01 c1.out -> li.value
+
+;   while i < n:
+node vri var_ref(i) in fb
+node vrn var_ref(n) in fb
+node clt lt in fb
+edge e02 vri.out -> clt.lhs
+edge e03 vrn.out -> clt.rhs
+node w1 while in fb body_region=wob
+edge e04 clt.out -> w1.cond
+
+;     let key = arr[i]
+node vra1 var_ref(arr) in wob
+node vri2 var_ref(i) in wob
+node ig1 index_get in wob
+edge e05 vra1.out -> ig1.lhs
+edge e06 vri2.out -> ig1.rhs
+node lkey let(key) in wob
+edge e07 ig1.out -> lkey.value
+
+;     let j = i - 1
+node vri3 var_ref(i) in wob
+node c1a const_int(1) in wob
+node sub1 sub in wob
+edge e08 vri3.out -> sub1.lhs
+edge e09 c1a.out -> sub1.rhs
+node lj let(j) in wob
+edge e10 sub1.out -> lj.value
+
+;     while j >= 0 and arr[j] > key:
+node vrj var_ref(j) in wob
+node c0 const_int(0) in wob
+node cge ge in wob
+edge e11 vrj.out -> cge.lhs
+edge e12 c0.out -> cge.rhs
+node vra2 var_ref(arr) in wob
+node vrj2 var_ref(j) in wob
+node ig2 index_get in wob
+edge e13 vra2.out -> ig2.lhs
+edge e14 vrj2.out -> ig2.rhs
+node vrk var_ref(key) in wob
+node cgt gt in wob
+edge e15 ig2.out -> cgt.lhs
+edge e16 vrk.out -> cgt.rhs
+node cand and in wob
+edge e17 cge.out -> cand.lhs
+edge e18 cgt.out -> cand.rhs
+node w2 while in wob body_region=wib
+edge e19 cand.out -> w2.cond
+
+;       arr[j+1] = arr[j]
+node vra3 var_ref(arr) in wib
+node vrj3 var_ref(j) in wib
+node c1b const_int(1) in wib
+node add1 add in wib
+edge e20 vrj3.out -> add1.lhs
+edge e21 c1b.out -> add1.rhs
+node vra4 var_ref(arr) in wib
+node vrj4 var_ref(j) in wib
+node ig3 index_get in wib
+edge e22 vra4.out -> ig3.lhs
+edge e23 vrj4.out -> ig3.rhs
+node is1 index_set in wib
+edge e24 vra3.out -> is1.container
+edge e25 add1.out -> is1.key
+edge e26 ig3.out -> is1.value
+
+;       j = j - 1
+node vrj5 var_ref(j) in wib
+node c1c const_int(1) in wib
+node sub2 sub in wib
+edge e27 vrj5.out -> sub2.lhs
+edge e28 c1c.out -> sub2.rhs
+node aj assign(j) in wib
+edge e29 sub2.out -> aj.value
+
+;     arr[j+1] = key
+node vra5 var_ref(arr) in wob
+node vrj6 var_ref(j) in wob
+node c1d const_int(1) in wob
+node add2 add in wob
+edge e30 vrj6.out -> add2.lhs
+edge e31 c1d.out -> add2.rhs
+node vrk2 var_ref(key) in wob
+node is2 index_set in wob
+edge e32 vra5.out -> is2.container
+edge e33 add2.out -> is2.key
+edge e34 vrk2.out -> is2.value
+
+;     i = i + 1
+node vri4 var_ref(i) in wob
+node c1e const_int(1) in wob
+node add3 add in wob
+edge e35 vri4.out -> add3.lhs
+edge e36 c1e.out -> add3.rhs
+node ai assign(i) in wob
+edge e37 add3.out -> ai.value
+
+;   return arr[2]
+node vra6 var_ref(arr) in fb
+node c2 const_int(2) in fb
+node ig4 index_get in fb
+edge e38 vra6.out -> ig4.lhs
+edge e39 c2.out -> ig4.rhs
+node ret return in fb
+edge e40 ig4.out -> ret.value
+
+; main
+node v9 const_int(9) in r0
+node v5 const_int(5) in r0
+node v1 const_int(1) in r0
+node v4 const_int(4) in r0
+node v3 const_int(3) in r0
+node arr array_literal in r0
+edge e41 v9.out -> arr.item0
+edge e42 v5.out -> arr.item1
+edge e43 v1.out -> arr.item2
+edge e44 v4.out -> arr.item3
+edge e45 v3.out -> arr.item4
+node c5 const_int(5) in r0
+node call func_call(insertion_sort) in r0
+edge e46 arr.out -> call.arg0
+edge e47 c5.out -> call.arg1
+root call.out

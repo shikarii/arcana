@@ -1,7 +1,7 @@
 # Arcana Development Direction
 
 **Status:** Living document — updated each development cycle
-**Date:** 2026-08-16
+**Date:** 2026-08-17
 **Prerequisite reading:** `arcana_compiler_architecture.docx`, `arcana_vm_compiler_runtime_architecture.docx`, `ARCANA_REPOSITORY_ENGINEERING_STANDARDS.md`
 
 ---
@@ -15,11 +15,11 @@ Arcana has a working vertical slice from semantic graph to VM execution:
 | Layer | Module | LOC | Status |
 |-------|--------|-----|--------|
 | Common | `src/common/` | 87 | Stable — typed IDs, status codes, memory macros |
-| Semantic Graph | `src/semantic_graph/` | 925 | Complete — nodes, edges, regions, ports, cyclic order, fixture parser, validation |
+| Semantic Graph | `src/semantic_graph/` | 925 | Complete — nodes, edges, regions, ports, cyclic order, fixture parser (all node kinds), validation |
 | Semantic Analysis | `src/semantic/` | 781 | Working — graph→HIR lowering, symbol resolution, scope analysis |
 | HIR | `src/hir/` | 662 | Working — expression trees, functions, params, validation, dump |
 | MIR | `src/mir/` | 478 | Working — basic blocks, temporaries, terminators, validation, dump |
-| Compiler | `src/compiler/` | 624 | Working — graph→bytecode, closures, constant pool, function table, debug maps |
+| Compiler | `src/compiler/` | 624 | Working — graph→bytecode, closures, constant folding, constant pool, function table, debug maps |
 | Bytecode | `src/bytecode/` | 662 | Complete — opcodes, .mgc format, serialization, disassembler |
 | Verifier | `src/verifier/` | 202 | Working — stack depth, jump targets, constant indices |
 | Runtime | `src/runtime/` | 452 | Complete — unified object model (string/array/map/closure/upvalue), mark-sweep GC |
@@ -29,7 +29,7 @@ Arcana has a working vertical slice from semantic graph to VM execution:
 | Diagnostics | `src/compiler/diagnostics.h` | (in compiler) | Complete — structured codes (ARC-XXX-NNNN), severity, source refs |
 
 **Total source:** ~7,400 LOC across 20 .h + 19 .c files
-**Tests:** 134 passing across 15 test files
+**Tests:** 174 passing across 17 test files
 **CI:** 4 jobs — Linux, Windows, macOS, Sanitizers (all green)
 **CLI tools:** arcana-run, arcana-dis, arcana-verify, arcana-asm, arcana-compile
 **Fuzzing:** 2 fuzz targets (bytecode, fixture)
@@ -49,6 +49,8 @@ Hand-authored semantic graph fixture
   → Independent verification
   → VM execution
   → Result: 15 from "5 + 10", 55 from fib(10)
+  → Service API: arc_service_run() wraps entire pipeline in one call
+  → Challenge corpus: L0 (8 basic programs), L1 (8 algorithms + 2 record programs)
 ```
 
 This proves the core thesis: **drawing-derived topology determines program meaning**, and the result survives through a conventional compiler pipeline to execution.
@@ -117,7 +119,7 @@ The three source documents (`compiler_architecture.docx`, `vm_runtime_architectu
 | Arena allocator for compiler | CPython pattern, eng standards §19 | ✅ Done (src/common/arena.h/.c) | — |
 | Separated scope resolution pass | Compiler doc §7 | ✅ Done (src/semantic/scope.h/.c) | — |
 | Type checking pass | Compiler doc §8 | ✅ Done (src/typecheck/typecheck.h/.c) | — |
-| Constant folding | Compiler doc §16.2 | ❌ Missing | LOW |
+| Constant folding | Compiler doc §16.2 | ✅ Done (binary + unary folding, nested expr, 4 tests) | — |
 | Short-circuit boolean lowering | Compiler doc §14.4 | ✅ Done (compiler emits conditional jumps) | — |
 | Loop lowering (while, break, continue) | Compiler doc §14.2-14.3 | ✅ Done (while + CYCLE topology-derived loops) | — |
 | Closure/capture analysis | Compiler doc §15.3 | ✅ Done (compiler capture analysis + upvalue descriptors) | — |
@@ -135,7 +137,7 @@ The three source documents (`compiler_architecture.docx`, `vm_runtime_architectu
 | Property-based tests | Eng standards §27 | ✅ Done (roundtrip serialization property test) | — |
 | Conformance test suite | Eng standards §25.7 | ❌ Missing | LATER |
 | Differential testing (interpreter vs VM) | Vision doc §17 | ✅ Done (test_cycle_interp_agreement, test_ref_interp_*) | — |
-| 500+ tests before public release | CPython analysis recommendation | ⚠️ At 130 | HIGH |
+| 500+ tests before public release | CPython analysis recommendation | ⚠️ At 174 | HIGH |
 
 ### 3.5 Documentation (from eng standards §57-58)
 
@@ -230,7 +232,7 @@ The engineering standards specify a target structure. Current vs target:
 ### Phase 3: Test Infrastructure ✅ COMPLETE
 
 #### 3.1 Split Test Suite ✅
-- 14 test files: test_runtime, test_vm, test_gc, test_bytecode, test_verifier, test_graph, test_pipeline, test_pipeline_e2e, test_infra, test_vm_collections, test_error_recovery, test_cycle.
+- 17 test files: test_runtime, test_vm, test_gc, test_bytecode, test_verifier, test_graph, test_pipeline, test_pipeline_e2e, test_infra, test_vm_collections, test_error_recovery, test_cycle, test_closures, test_service, test_challenge_L0, test_challenge_L1, test_const_fold.
 
 #### 3.2 Golden Tests ✅
 - Disassembly golden test in test_pipeline.c.
@@ -343,14 +345,19 @@ This is the recommended order. Each item is a commit-sized unit of work.
  ✅  Directed-cycle-as-loop (CYCLE regions + BREAK_IF, 7 tests)
  ✅  Scope extraction (src/semantic/scope.h/.c)
  ✅  Pedantic linting (-Wpedantic, -Wshadow, /WX, .clang-tidy)
+ ✅  Closure upvalue wiring (compiler + VM + tests)
+ ✅  Tooling service API (arc_service_run, unified pipeline entry point)
+ ✅  Challenge corpus L0 (8 fixtures: arithmetic, fib, factorial, nested calls, etc.)
+ ✅  Challenge corpus L1 (8 fixtures: bubble/selection/insertion sort, binary search, max subarray, two sum, records)
+ ✅  Mutual recursion (pre-registration of function indices)
+ ✅  Record pipeline (RECORD_NEW/FIELD_GET/FIELD_SET opcodes, compiler, fixture parser)
+ ✅  Constant folding (binary + unary + nested, int/float/bool, comparisons, bitwise)
 --- above completed ---
-1.  ~~Finish closure upvalue wiring~~ ✅ Done
-2.  Edge crossing semantics (design document first)
-3.  Module system
-4.  Language specification
-5.  WASM/Emscripten build
-6.  Constant folding
-7.  Conformance test suite
+1.  Edge crossing semantics (design document first)
+2.  Module system
+3.  Language specification
+4.  WASM/Emscripten build
+5.  Conformance test suite
 ```
 
 ---
@@ -361,7 +368,7 @@ Before any public release or external visibility:
 
 - [x] All v0 language features working (float, strings, loops, functions, branches, arrays, maps, exceptions)
 - [x] GC with stress mode passing all tests
-- [ ] 500+ tests across split test files (at 130)
+- [ ] 500+ tests across split test files (at 174)
 - [x] Golden tests for disassembly and IR dumps
 - [x] Compile-fail test suite
 - [x] Differential testing (interpreter vs VM) automated

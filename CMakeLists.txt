@@ -81,7 +81,7 @@ target_link_libraries(arcana_typecheck PUBLIC arcana_semantic_graph)
 list(APPEND ARCANA_LIBS arcana_typecheck)
 
 add_library(arcana_compiler STATIC src/compiler/compiler.c src/compiler/compile_nodes.c)
-target_link_libraries(arcana_compiler PUBLIC arcana_bytecode arcana_semantic_graph arcana_semantic)
+target_link_libraries(arcana_compiler PUBLIC arcana_bytecode arcana_semantic_graph arcana_semantic $<$<NOT:$<BOOL:${WIN32}>>:m>)
 list(APPEND ARCANA_LIBS arcana_compiler)
 
 add_library(arcana_interpreter STATIC src/interpreter/interpreter.c)
@@ -119,6 +119,7 @@ add_executable(arcana_tests
     tests/test_challenge_L0.c
     tests/test_service.c
     tests/test_challenge_L1.c
+    tests/test_const_fold.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode

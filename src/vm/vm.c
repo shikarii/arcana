@@ -337,6 +337,7 @@ static ArcStatus vm_dispatch(ArcVm* vm, uint8_t op, uint32_t instr_ip) {
         return vm_exec_closure(vm, op);
     case OP_ARRAY_NEW: case OP_INDEX_GET: case OP_INDEX_SET:
     case OP_LENGTH: case OP_MAP_NEW:
+    case OP_RECORD_NEW: case OP_FIELD_GET: case OP_FIELD_SET:
         return vm_exec_collections(vm, op);
     case OP_INTRINSIC: return vm_exec_intrinsic(vm);
     case OP_HALT: vm->halted = true; return ARC_OK;

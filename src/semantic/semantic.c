@@ -73,12 +73,21 @@ bool is_expr_node(ArcNodeKind k) {
     switch (k) {
     case ARC_NODE_CONST_INT: case ARC_NODE_CONST_FLOAT:
     case ARC_NODE_CONST_BOOL: case ARC_NODE_CONST_NULL:
+    case ARC_NODE_CONST_STRING:
     case ARC_NODE_ADD: case ARC_NODE_SUB: case ARC_NODE_MUL:
     case ARC_NODE_DIV: case ARC_NODE_MOD: case ARC_NODE_NEG:
     case ARC_NODE_EQ: case ARC_NODE_NEQ: case ARC_NODE_LT:
     case ARC_NODE_LE: case ARC_NODE_GT: case ARC_NODE_GE:
+    case ARC_NODE_NOT: case ARC_NODE_AND: case ARC_NODE_OR:
+    case ARC_NODE_BIT_AND: case ARC_NODE_BIT_OR: case ARC_NODE_BIT_XOR:
+    case ARC_NODE_BIT_NOT: case ARC_NODE_SHL: case ARC_NODE_SHR:
+    case ARC_NODE_CAST_I64: case ARC_NODE_CAST_F64: case ARC_NODE_CAST_STR:
+    case ARC_NODE_ARRAY_LITERAL: case ARC_NODE_MAP_LITERAL:
+    case ARC_NODE_INDEX_GET: case ARC_NODE_LENGTH:
+    case ARC_NODE_STR_LEN: case ARC_NODE_STR_SLICE: case ARC_NODE_STR_INDEX:
     case ARC_NODE_VAR_REF: case ARC_NODE_FUNC_CALL:
-    case ARC_NODE_NOT:
+    case ARC_NODE_INTRINSIC_CALL:
+    case ARC_NODE_RECORD_NEW: case ARC_NODE_FIELD_GET: case ARC_NODE_FIELD_SET:
         return true;
     default:
         return false;

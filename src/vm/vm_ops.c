@@ -288,13 +288,57 @@ static ArcStatus vm_exec_map_new(ArcVm* vm) {
     return ARC_OK;
 }
 
+static ArcStatus vm_exec_record_new(ArcVm* vm) {
+    uint16_t name_idx = vm_read_u16(vm);
+    const char* name = "";
+    if (name_idx < vm->image->constants.count &&
+        vm->image->constants.entries[name_idx].tag == ARC_CONST_STRING)
+        name = vm->image->constants.entries[name_idx].as.str.data;
+    ArcObjRecord* rec = arc_obj_record_new(&vm->gc, name, 4);
+    if (!vm_push(vm, arc_val_obj((ArcObject*)rec))) return ARC_ERR_RUNTIME;
+    return ARC_OK;
+}
+
+static ArcStatus vm_exec_field_get(ArcVm* vm) {
+    uint16_t name_idx = vm_read_u16(vm);
+    ArcValue obj;
+    if (!vm_pop(vm, &obj)) return ARC_ERR_RUNTIME;
+    if (!ARC_IS_RECORD(obj)) { vm_error(vm, "field_get: not a record"); return ARC_ERR_RUNTIME; }
+    const char* fname = "";
+    if (name_idx < vm->image->constants.count &&
+        vm->image->constants.entries[name_idx].tag == ARC_CONST_STRING)
+        fname = vm->image->constants.entries[name_idx].as.str.data;
+    ArcValue val;
+    if (!arc_obj_record_get(ARC_AS_RECORD(obj), fname, &val))
+        val = arc_val_null();
+    if (!vm_push(vm, val)) return ARC_ERR_RUNTIME;
+    return ARC_OK;
+}
+
+static ArcStatus vm_exec_field_set(ArcVm* vm) {
+    uint16_t name_idx = vm_read_u16(vm);
+    ArcValue val, obj;
+    if (!vm_pop(vm, &val) || !vm_pop(vm, &obj)) return ARC_ERR_RUNTIME;
+    if (!ARC_IS_RECORD(obj)) { vm_error(vm, "field_set: not a record"); return ARC_ERR_RUNTIME; }
+    const char* fname = "";
+    if (name_idx < vm->image->constants.count &&
+        vm->image->constants.entries[name_idx].tag == ARC_CONST_STRING)
+        fname = vm->image->constants.entries[name_idx].as.str.data;
+    arc_obj_record_set(ARC_AS_RECORD(obj), fname, val);
+    if (!vm_push(vm, obj)) return ARC_ERR_RUNTIME;
+    return ARC_OK;
+}
+
 ArcStatus vm_exec_collections(ArcVm* vm, uint8_t op) {
     switch (op) {
-    case OP_ARRAY_NEW: return vm_exec_array_new(vm);
-    case OP_INDEX_GET: return vm_exec_index_get(vm);
-    case OP_INDEX_SET: return vm_exec_index_set(vm);
-    case OP_LENGTH:    return vm_exec_length(vm);
-    case OP_MAP_NEW:   return vm_exec_map_new(vm);
+    case OP_ARRAY_NEW:  return vm_exec_array_new(vm);
+    case OP_INDEX_GET:  return vm_exec_index_get(vm);
+    case OP_INDEX_SET:  return vm_exec_index_set(vm);
+    case OP_LENGTH:     return vm_exec_length(vm);
+    case OP_MAP_NEW:    return vm_exec_map_new(vm);
+    case OP_RECORD_NEW: return vm_exec_record_new(vm);
+    case OP_FIELD_GET:  return vm_exec_field_get(vm);
+    case OP_FIELD_SET:  return vm_exec_field_set(vm);
     default: vm_error(vm, "bad collection op"); return ARC_ERR_RUNTIME;
     }
 }

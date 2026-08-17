@@ -1,0 +1,158 @@
+; Level 1.09: Bubble sort
+; Sort [5,3,8,1,2] and return arr[0] (should be 1 after sort)
+; Expected result: i64(1)
+region r0 module
+region fb function parent=r0
+region wob loop_body parent=fb
+region wib loop_body parent=wob
+region ift then parent=wib
+
+; def bubble_sort(arr, n):
+node fdef func_def(bubble_sort) in r0 body_region=fb arity=2
+node p_arr param(arr) in fb
+node p_n param(n) in fb
+
+;   let i = 0
+node c0a const_int(0) in fb
+node li let(i) in fb
+edge e01 c0a.out -> li.value
+
+;   while i < n - 1:
+node vri var_ref(i) in fb
+node vrn1 var_ref(n) in fb
+node c1a const_int(1) in fb
+node sub1 sub in fb
+edge e02 vrn1.out -> sub1.lhs
+edge e03 c1a.out -> sub1.rhs
+node cmp1 lt in fb
+edge e04 vri.out -> cmp1.lhs
+edge e05 sub1.out -> cmp1.rhs
+node w1 while in fb body_region=wob
+edge e06 cmp1.out -> w1.cond
+
+;     let j = 0
+node c0b const_int(0) in wob
+node lj let(j) in wob
+edge e07 c0b.out -> lj.value
+
+;     while j < n - i - 1:
+node vrj var_ref(j) in wob
+node vrn2 var_ref(n) in wob
+node vri2 var_ref(i) in wob
+node sub2 sub in wob
+edge e08 vrn2.out -> sub2.lhs
+edge e09 vri2.out -> sub2.rhs
+node c1b const_int(1) in wob
+node sub3 sub in wob
+edge e10 sub2.out -> sub3.lhs
+edge e11 c1b.out -> sub3.rhs
+node cmp2 lt in wob
+edge e12 vrj.out -> cmp2.lhs
+edge e13 sub3.out -> cmp2.rhs
+node w2 while in wob body_region=wib
+edge e14 cmp2.out -> w2.cond
+
+;       if arr[j] > arr[j+1]:
+node vra1 var_ref(arr) in wib
+node vrj2 var_ref(j) in wib
+node ig1 index_get in wib
+edge e15 vra1.out -> ig1.lhs
+edge e16 vrj2.out -> ig1.rhs
+node vrj3 var_ref(j) in wib
+node c1c const_int(1) in wib
+node add1 add in wib
+edge e17 vrj3.out -> add1.lhs
+edge e18 c1c.out -> add1.rhs
+node vra2 var_ref(arr) in wib
+node ig2 index_get in wib
+edge e19 vra2.out -> ig2.lhs
+edge e20 add1.out -> ig2.rhs
+node cmp3 gt in wib
+edge e21 ig1.out -> cmp3.lhs
+edge e22 ig2.out -> cmp3.rhs
+node iff if in wib then_region=ift
+edge e23 cmp3.out -> iff.cond
+
+;         let tmp = arr[j]
+node vra3 var_ref(arr) in ift
+node vrj4 var_ref(j) in ift
+node ig3 index_get in ift
+edge e24 vra3.out -> ig3.lhs
+edge e25 vrj4.out -> ig3.rhs
+node ltmp let(tmp) in ift
+edge e26 ig3.out -> ltmp.value
+
+;         arr[j] = arr[j+1]
+node vra4 var_ref(arr) in ift
+node vrj5 var_ref(j) in ift
+node vrj6 var_ref(j) in ift
+node c1d const_int(1) in ift
+node add2 add in ift
+edge e27 vrj6.out -> add2.lhs
+edge e28 c1d.out -> add2.rhs
+node vra5 var_ref(arr) in ift
+node ig4 index_get in ift
+edge e29 vra5.out -> ig4.lhs
+edge e30 add2.out -> ig4.rhs
+node is1 index_set in ift
+edge e31 vra4.out -> is1.container
+edge e32 vrj5.out -> is1.key
+edge e33 ig4.out -> is1.value
+
+;         arr[j+1] = tmp
+node vra6 var_ref(arr) in ift
+node vrj7 var_ref(j) in ift
+node c1e const_int(1) in ift
+node add3 add in ift
+edge e34 vrj7.out -> add3.lhs
+edge e35 c1e.out -> add3.rhs
+node vrtmp var_ref(tmp) in ift
+node is2 index_set in ift
+edge e36 vra6.out -> is2.container
+edge e37 add3.out -> is2.key
+edge e38 vrtmp.out -> is2.value
+
+;     j = j + 1
+node vrj8 var_ref(j) in wib
+node c1f const_int(1) in wib
+node add4 add in wib
+edge e39 vrj8.out -> add4.lhs
+edge e40 c1f.out -> add4.rhs
+node aj assign(j) in wib
+edge e41 add4.out -> aj.value
+
+;   i = i + 1
+node vri3 var_ref(i) in wob
+node c1g const_int(1) in wob
+node add5 add in wob
+edge e42 vri3.out -> add5.lhs
+edge e43 c1g.out -> add5.rhs
+node ai assign(i) in wob
+edge e44 add5.out -> ai.value
+
+;   return arr[0]
+node vra7 var_ref(arr) in fb
+node c0c const_int(0) in fb
+node ig5 index_get in fb
+edge e45 vra7.out -> ig5.lhs
+edge e46 c0c.out -> ig5.rhs
+node ret return in fb
+edge e47 ig5.out -> ret.value
+
+; main: arr = [5, 3, 8, 1, 2]; bubble_sort(arr, 5)
+node v5 const_int(5) in r0
+node v3 const_int(3) in r0
+node v8 const_int(8) in r0
+node v1 const_int(1) in r0
+node v2 const_int(2) in r0
+node arr array_literal in r0
+edge e48 v5.out -> arr.item0
+edge e49 v3.out -> arr.item1
+edge e50 v8.out -> arr.item2
+edge e51 v1.out -> arr.item3
+edge e52 v2.out -> arr.item4
+node c5 const_int(5) in r0
+node call func_call(bubble_sort) in r0
+edge e53 arr.out -> call.arg0
+edge e54 c5.out -> call.arg1
+root call.out
