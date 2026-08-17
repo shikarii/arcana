@@ -38,8 +38,9 @@ static void build_add_graph(ArcGraph* g, int64_t lhs, int64_t rhs) {
     arc_graph_add_edge(g, p2out, p3in);
 }
 
-/* Compile, run, return result. Caller cleans up via cleanup_pipeline(). */
-static ArcValue pipeline_compile_run(ArcGraph* g, ArcCompileResult* cr, ArcVm* vm) {
+/* Compile, run, write result to *out. Caller cleans up via cleanup_pipeline(). */
+static void pipeline_compile_run(ArcGraph* g, ArcCompileResult* cr,
+                                 ArcVm* vm, ArcValue* out) {
     *cr = arc_compile(g);
     if (!cr->success) {
         for (int i = 0; i < cr->error_count; i++)
@@ -53,7 +54,7 @@ static ArcValue pipeline_compile_run(ArcGraph* g, ArcCompileResult* cr, ArcVm* v
     ArcStatus s = arc_vm_run(vm);
     fclose(vm->output); vm->output = NULL;
     ASSERT(s == ARC_OK);
-    return arc_vm_result(vm);
+    *out = arc_vm_result(vm);
 }
 
 static void cleanup_pipeline(ArcVm* vm, ArcCompileResult* cr, ArcGraph* g) {
@@ -92,7 +93,7 @@ TEST(test_e2e_5_plus_10) {
     build_add_graph(&g, 5, 10);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 15);
     cleanup_pipeline(&vm, &cr, &g);
@@ -232,7 +233,7 @@ TEST(test_compiler_short_circuit_and) {
     ArcGraph g;
     build_bool_int_graph(&g, ARC_NODE_AND, true, 42, 9001);
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 42);
     cleanup_pipeline(&vm, &cr, &g);
@@ -242,7 +243,7 @@ TEST(test_compiler_short_circuit_and_false) {
     ArcGraph g;
     build_bool_int_graph(&g, ARC_NODE_AND, false, 42, 9101);
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_BOOL);
     ASSERT(result.as.b == false);
     cleanup_pipeline(&vm, &cr, &g);
@@ -252,7 +253,7 @@ TEST(test_compiler_short_circuit_or) {
     ArcGraph g;
     build_bool_int_graph(&g, ARC_NODE_OR, false, 99, 9201);
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 99);
     cleanup_pipeline(&vm, &cr, &g);
@@ -278,7 +279,7 @@ TEST(test_compiler_const_string) {
     arc_graph_add_edge(&g, p_str, p_out_in);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(ARC_IS_STRING(result));
     ASSERT(strcmp(ARC_AS_STRING(result)->data, "hello") == 0);
     cleanup_pipeline(&vm, &cr, &g);
@@ -311,7 +312,7 @@ TEST(test_compiler_bitwise_and) {
     arc_graph_add_edge(&g, p_out, p_out_in);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 15);
     cleanup_pipeline(&vm, &cr, &g);
@@ -323,7 +324,7 @@ TEST(test_compiler_cast_i64) {
     g.nodes[0].attr.float_value = 3.7;  /* node 0 is the CONST_FLOAT */
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 3);
     cleanup_pipeline(&vm, &cr, &g);
@@ -350,7 +351,7 @@ TEST(test_compiler_str_len) {
     arc_graph_add_edge(&g, p_out, p_out_in);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 3);
     cleanup_pipeline(&vm, &cr, &g);
@@ -412,7 +413,7 @@ TEST(test_compiler_try_throw) {
     ArcGraph g;
     build_try_throw_graph(&g);
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = pipeline_compile_run(&g, &cr, &vm);
+    ArcValue result; pipeline_compile_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 99);
     cleanup_pipeline(&vm, &cr, &g);

@@ -40,10 +40,10 @@ static void build_binary_op_graph(ArcGraph* g, ArcNodeKind op,
     arc_graph_add_edge(g, p_op_out, p_out_in);
 }
 
-/* Compile a graph, verify, run VM, return result value.
- * Caller must call cleanup_e2e() with the out params when done.
- * Returns false if any step fails (with ASSERT). */
-static ArcValue compile_and_run(ArcGraph* g, ArcCompileResult* cr, ArcVm* vm) {
+/* Compile a graph, verify, run VM, write result to *out.
+ * Caller must call cleanup_e2e() with the out params when done. */
+static void compile_and_run(ArcGraph* g, ArcCompileResult* cr,
+                            ArcVm* vm, ArcValue* out) {
     *cr = arc_compile(g);
     if (!cr->success) {
         for (int i = 0; i < cr->error_count; i++)
@@ -58,7 +58,7 @@ static ArcValue compile_and_run(ArcGraph* g, ArcCompileResult* cr, ArcVm* vm) {
     ArcStatus s = arc_vm_run(vm);
     fclose(vm->output); vm->output = NULL;
     ASSERT(s == ARC_OK);
-    return arc_vm_result(vm);
+    *out = arc_vm_result(vm);
 }
 
 static void cleanup_e2e(ArcVm* vm, ArcCompileResult* cr, ArcGraph* g) {
@@ -144,7 +144,7 @@ TEST(test_e2e_function_call) {
     build_call_with_output(&g, r0, "double", 7, 3020);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = compile_and_run(&g, &cr, &vm);
+    ArcValue result; compile_and_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 14);
     cleanup_e2e(&vm, &cr, &g);
@@ -219,7 +219,7 @@ TEST(test_e2e_if_else) {
     build_call_with_output(&g, r0, "pick", 1, 4040);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = compile_and_run(&g, &cr, &vm);
+    ArcValue result; compile_and_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 42);
     cleanup_e2e(&vm, &cr, &g);
@@ -342,7 +342,7 @@ TEST(test_e2e_fibonacci) {
     build_call_with_output(&g, r0, "fib", 10, 5050);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = compile_and_run(&g, &cr, &vm);
+    ArcValue result; compile_and_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 55);
     cleanup_e2e(&vm, &cr, &g);
@@ -480,7 +480,7 @@ TEST(test_e2e_while_loop) {
     build_call_with_output(&g, r0, "sum_to", 10, 6040);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = compile_and_run(&g, &cr, &vm);
+    ArcValue result; compile_and_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_I64);
     ASSERT_EQ_I64(result.as.i64, 55);
     ASSERT(cr.image.debug.count > 0);
@@ -511,7 +511,7 @@ TEST(test_e2e_not_operator) {
     arc_graph_add_edge(&g, p_not_out, p_out_in);
 
     ArcCompileResult cr; ArcVm vm;
-    ArcValue result = compile_and_run(&g, &cr, &vm);
+    ArcValue result; compile_and_run(&g, &cr, &vm, &result);
     ASSERT(result.tag == VAL_BOOL);
     ASSERT(result.as.b == false);
     cleanup_e2e(&vm, &cr, &g);
