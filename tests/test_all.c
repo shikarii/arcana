@@ -408,6 +408,20 @@ static void run_cycle_tests(void) {
     RUN(test_cycle_scope_resolution);
 }
 
+/* --- test_closures.c --- */
+extern void test_closure_compile_smoke(void);
+extern void test_closure_upvalue_one_capture(void);
+extern void test_closure_regular_func_no_upvalues(void);
+extern void test_closure_target_skipped(void);
+
+static void run_closure_tests(void) {
+    printf("\n[Closures]\n");
+    RUN(test_closure_compile_smoke);
+    RUN(test_closure_upvalue_one_capture);
+    RUN(test_closure_regular_func_no_upvalues);
+    RUN(test_closure_target_skipped);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -425,6 +439,7 @@ int main(void) {
     run_runtime_tests();
     run_error_recovery_tests();
     run_cycle_tests();
+    run_closure_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

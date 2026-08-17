@@ -19,7 +19,7 @@ Arcana has a working vertical slice from semantic graph to VM execution:
 | Semantic Analysis | `src/semantic/` | 781 | Working — graph→HIR lowering, symbol resolution, scope analysis |
 | HIR | `src/hir/` | 662 | Working — expression trees, functions, params, validation, dump |
 | MIR | `src/mir/` | 478 | Working — basic blocks, temporaries, terminators, validation, dump |
-| Compiler | `src/compiler/` | 784 | Working — graph→bytecode, constant pool, function table, debug maps |
+| Compiler | `src/compiler/` | 624 | Working — graph→bytecode, closures, constant pool, function table, debug maps |
 | Bytecode | `src/bytecode/` | 662 | Complete — opcodes, .mgc format, serialization, disassembler |
 | Verifier | `src/verifier/` | 202 | Working — stack depth, jump targets, constant indices |
 | Runtime | `src/runtime/` | 452 | Complete — unified object model (string/array/map/closure/upvalue), mark-sweep GC |
@@ -29,7 +29,7 @@ Arcana has a working vertical slice from semantic graph to VM execution:
 | Diagnostics | `src/compiler/diagnostics.h` | (in compiler) | Complete — structured codes (ARC-XXX-NNNN), severity, source refs |
 
 **Total source:** ~7,400 LOC across 20 .h + 19 .c files
-**Tests:** 130 passing across 14 test files
+**Tests:** 134 passing across 15 test files
 **CI:** 4 jobs — Linux, Windows, macOS, Sanitizers (all green)
 **CLI tools:** arcana-run, arcana-dis, arcana-verify, arcana-asm, arcana-compile
 **Fuzzing:** 2 fuzz targets (bytecode, fixture)
@@ -91,7 +91,7 @@ The three source documents (`compiler_architecture.docx`, `vm_runtime_architectu
 | Iteration/loops | Required v0 | ✅ Done (while loop via semantic graph, tested fib/sum) | — |
 | Comparisons | Required v0 | ✅ Done | — |
 | Basic output (print) | Required v0 | ✅ Done (clock intrinsic) | — |
-| Closures/captures | Deferred | ⚠️ VM opcodes exist (closure, get/set_upval, close_upval); upvalue wiring incomplete | MEDIUM |
+| Closures/captures | Done | ✅ VM opcodes + compiler capture analysis + upvalue descriptors | — |
 | Classes/objects | Deferred | ❌ Not implemented | LATER |
 | Exceptions | Deferred | ✅ Done (try_begin/try_end/throw, handler stack, frame unwinding) | — |
 | Module/import system | Deferred | ❌ Not implemented | LATER |
@@ -120,7 +120,7 @@ The three source documents (`compiler_architecture.docx`, `vm_runtime_architectu
 | Constant folding | Compiler doc §16.2 | ❌ Missing | LOW |
 | Short-circuit boolean lowering | Compiler doc §14.4 | ✅ Done (compiler emits conditional jumps) | — |
 | Loop lowering (while, break, continue) | Compiler doc §14.2-14.3 | ✅ Done (while + CYCLE topology-derived loops) | — |
-| Closure/capture analysis | Compiler doc §15.3 | ⚠️ VM opcodes exist; compiler capture analysis missing | MEDIUM |
+| Closure/capture analysis | Compiler doc §15.3 | ✅ Done (compiler capture analysis + upvalue descriptors) | — |
 | Error recovery (continue past errors) | Eng standards §6, CPython pattern | ✅ Done (poison nodes, multi-diagnostic) | — |
 | Opcode generation from data file | Eng standards §8, CPython pattern | ✅ Done (X-macro in opcodes.h) | — |
 
@@ -207,11 +207,11 @@ The engineering standards specify a target structure. Current vs target:
 - Bitwise: `OP_BIT_AND/OR/XOR/NOT`, `OP_SHL`, `OP_SHR` (i64-only).
 - Type casts: `OP_CAST_I64`, `OP_CAST_F64`, `OP_CAST_STR`.
 
-#### 1.9 Closure Opcodes ⚠️ Partial
-- VM opcodes exist: `OP_CLOSURE`, `OP_GET_UPVAL`, `OP_SET_UPVAL`, `OP_CLOSE_UPVAL`.
-- `OBJ_CLOSURE` and `OBJ_UPVALUE` object types defined.
-- **Missing**: Upvalue descriptors in `ArcFuncRecord`, compiler capture analysis, full VM wiring.
-- **Est:** ~200 LOC across format.h/.c, vm.c, compiler.c
+#### 1.9 Closures ✅
+- VM opcodes: `OP_CLOSURE`, `OP_GET_UPVAL`, `OP_SET_UPVAL`, `OP_CLOSE_UPVAL`.
+- `OBJ_CLOSURE` and `OBJ_UPVALUE` object types in runtime.
+- Compiler capture analysis: `find_upvalue()`, enclosing scope tracking, `ArcUpvalueDesc` generation.
+- Compiler split: `compiler.c` (entry point) + `compile_nodes.c` (node dispatch) + `compiler_internal.h` (shared state).
 
 ### Phase 2: Compiler Hardening ✅ COMPLETE
 
@@ -277,10 +277,11 @@ After the v0 language features are solid, explore the geometry-native extensions
 - `ObjRecord`: field array indexed by compiler-assigned offsets
 - Member access operations
 
-#### 5.3 Closures
-- Capture analysis pass (compiler doc §15.3)
-- Upvalue/cell representation
-- `ObjClosure` object type
+#### 5.3 Closures ✅
+- Capture analysis in compiler (enclosing scope → upvalue descriptors)
+- Upvalue/cell representation in `ArcUpvalueDesc`
+- `ObjClosure` and `ObjUpvalue` object types in runtime
+- 4 closure-specific tests
 
 #### 5.4 WASM Target
 - Emscripten build of arcana-run
@@ -343,7 +344,7 @@ This is the recommended order. Each item is a commit-sized unit of work.
  ✅  Scope extraction (src/semantic/scope.h/.c)
  ✅  Pedantic linting (-Wpedantic, -Wshadow, /WX, .clang-tidy)
 --- above completed ---
-1.  Finish closure upvalue wiring (format.h, vm.c, compiler.c)
+1.  ~~Finish closure upvalue wiring~~ ✅ Done
 2.  Edge crossing semantics (design document first)
 3.  Module system
 4.  Language specification
@@ -372,7 +373,59 @@ Before any public release or external visibility:
 
 ---
 
-## 8. Principles (Carried from Vision Documents)
+## 8. Future Projects (Out of Scope for This Repository)
+
+Two major layers sit above the compiler/VM substrate and will be separate projects:
+
+### 8.1 Arcana Language Surface
+
+The actual programming language that users write — visual vocabulary, rune semantics,
+capsule literals, pattern circles, sigil abstractions, type-aware connections, etc.
+This layer consumes the semantic graph API and produces programs that compile through
+the existing pipeline. It includes:
+
+- Visual vocabulary design (runes, regions, sigils, capsules, connections)
+- Pattern matching / regex-as-graph (automata mapped to topology)
+- Type system surface (port shapes, type badges, generic specialization)
+- Standard library (collections, strings, math, file I/O, JSON, regex)
+- Module/package system (manifests, dependency resolution, registry)
+- Challenge corpus (Levels 0-9: algorithms → parsing → systems → GPU → self-hosting)
+
+Reference: `ARCANA_VISUAL_IDE_AND_PRODUCT_COMPLETENESS_DESIGN.md` §4-15, §27-38, §52-55
+
+### 8.2 VS Code Extension / Visual IDE
+
+The graphical development environment — a VS Code Custom Editor extension backed by
+a webview canvas. This is a TypeScript/web project that talks to an Arcana tooling
+service (which wraps the C compiler/VM). It includes:
+
+- Custom editor for `.arcana` files (canvas renderer, interaction controller)
+- Semantic zoom (far/medium/near detail levels)
+- Sigil library sidebar, module browser, inspector panels
+- Smart connection UX (type-compatible port highlighting, drop-to-insert)
+- Layout tools (radial distribute, circular align, minimize crossings)
+- DAP debugger integration (graphical breakpoints, value flow visualization)
+- Profiler visualization (hot-path emphasis on graph)
+- Semantic diff/merge for version control
+- Keyboard-first and stylus construction modes
+- Source serialization (deterministic, diffable, layout-separable)
+
+Reference: `ARCANA_VISUAL_IDE_AND_PRODUCT_COMPLETENESS_DESIGN.md` §16-26, §56, §62-63
+
+### 8.3 Relationship to This Repository
+
+This repository (`arcana`) is the **substrate**: bytecode format, VM, compiler,
+verifier, GC, semantic graph, and CLI tools. The language surface and visual IDE
+depend on this substrate but do not live here. The tooling service (§8.2) will wrap
+the CLI tools and C API from this repo.
+
+The substrate must be complete enough that the upper layers can be built without
+fighting the runtime. Key substrate completions still needed: modules,
+C FFI (eventually), file I/O intrinsics. Closures are now complete.
+
+---
+
+## 9. Principles (Carried from Vision Documents)
 
 1. **The drawing is the language.** Never accidentally create a text syntax that becomes the "real" language.
 2. **Correctness before cleverness.** No optimization until unoptimized behavior is tested.
@@ -385,7 +438,7 @@ Before any public release or external visibility:
 
 ---
 
-## 9. Session Protocol
+## 10. Session Protocol
 
 Every development session:
 
