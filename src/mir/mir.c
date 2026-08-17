@@ -134,65 +134,48 @@ static const char* op_name(MirOpKind k) {
     return "???";
 }
 
-static void dump_instr(const MirInstr* ins, FILE* out) {
-    fprintf(out, "      ");
-
-    /* destination */
-    if (ins->dest != MIR_TEMP_NONE)
-        fprintf(out, "t%u = ", ins->dest);
-
+/* --- Dump instruction operands by kind --- */
+static void dump_instr_operands(const MirInstr* ins, FILE* out) {
     switch (ins->kind) {
-        case MIR_OP_CONST_INT:
-            fprintf(out, "const_int %" PRId64, ins->as.int_val);
-            break;
-        case MIR_OP_CONST_FLOAT:
-            fprintf(out, "const_float %g", ins->as.float_val);
-            break;
-        case MIR_OP_CONST_BOOL:
-            fprintf(out, "const_bool %s", ins->as.bool_val ? "true" : "false");
-            break;
-        case MIR_OP_CONST_NULL:
-            fprintf(out, "const_null");
-            break;
+        case MIR_OP_CONST_INT:   fprintf(out, "const_int %" PRId64, ins->as.int_val); break;
+        case MIR_OP_CONST_FLOAT: fprintf(out, "const_float %g", ins->as.float_val); break;
+        case MIR_OP_CONST_BOOL:  fprintf(out, "const_bool %s", ins->as.bool_val ? "true" : "false"); break;
+        case MIR_OP_CONST_NULL:  fprintf(out, "const_null"); break;
         case MIR_OP_ADD: case MIR_OP_SUB: case MIR_OP_MUL:
         case MIR_OP_DIV: case MIR_OP_MOD:
         case MIR_OP_EQ:  case MIR_OP_NEQ:
         case MIR_OP_LT:  case MIR_OP_LE:
         case MIR_OP_GT:  case MIR_OP_GE:
-            fprintf(out, "%s t%u t%u",
-                    op_name(ins->kind),
-                    ins->as.binary.lhs,
-                    ins->as.binary.rhs);
+            fprintf(out, "%s t%u t%u", op_name(ins->kind), ins->as.binary.lhs, ins->as.binary.rhs);
             break;
         case MIR_OP_NEG: case MIR_OP_NOT:
-            fprintf(out, "%s t%u", op_name(ins->kind), ins->as.unary.operand);
-            break;
+            fprintf(out, "%s t%u", op_name(ins->kind), ins->as.unary.operand); break;
         case MIR_OP_LOAD_LOCAL:
-            fprintf(out, "load_local %u", ins->as.local_idx);
-            break;
+            fprintf(out, "load_local %u", ins->as.local_idx); break;
         case MIR_OP_STORE_LOCAL:
-            fprintf(out, "store_local %u, t%u",
-                    ins->as.store.local_idx,
-                    ins->as.store.value);
-            break;
+            fprintf(out, "store_local %u, t%u", ins->as.store.local_idx, ins->as.store.value); break;
         case MIR_OP_CALL:
             fprintf(out, "call func_%u(", ins->as.call.func_idx);
             for (uint8_t i = 0; i < ins->as.call.argc; ++i) {
                 if (i > 0) fprintf(out, ", ");
                 fprintf(out, "t%u", ins->as.call.args[i]);
             }
-            fprintf(out, ")");
-            break;
+            fprintf(out, ")"); break;
         case MIR_OP_INTRINSIC:
             fprintf(out, "intrinsic %u(", ins->as.intrinsic.intrinsic_id);
             for (uint8_t i = 0; i < ins->as.intrinsic.argc; ++i) {
                 if (i > 0) fprintf(out, ", ");
                 fprintf(out, "t%u", ins->as.intrinsic.args[i]);
             }
-            fprintf(out, ")");
-            break;
+            fprintf(out, ")"); break;
     }
+}
 
+static void dump_instr(const MirInstr* ins, FILE* out) {
+    fprintf(out, "      ");
+    if (ins->dest != MIR_TEMP_NONE)
+        fprintf(out, "t%u = ", ins->dest);
+    dump_instr_operands(ins, out);
     fprintf(out, "\n");
 }
 
@@ -250,6 +233,33 @@ static bool block_id_valid(const MirFunction* f, MirBlockId id) {
     return id < f->block_count;
 }
 
+/* --- Validate terminator targets for a single block --- */
+static void validate_block_term(const MirFunction* f, const MirBlock* b,
+                                 uint32_t fi, uint32_t bi, MirValidation* v) {
+    if (!b->has_term) {
+        verr(v, fi, bi, "func '%s' block_%u: missing terminator", f->name, b->id);
+        return;
+    }
+    switch (b->term.kind) {
+        case MIR_TERM_GOTO:
+            if (!block_id_valid(f, b->term.as.target))
+                verr(v, fi, bi, "func '%s' block_%u: goto target block_%u out of range",
+                     f->name, b->id, b->term.as.target);
+            break;
+        case MIR_TERM_BRANCH:
+            if (!block_id_valid(f, b->term.as.branch.then_block))
+                verr(v, fi, bi, "func '%s' block_%u: branch then target block_%u out of range",
+                     f->name, b->id, b->term.as.branch.then_block);
+            if (!block_id_valid(f, b->term.as.branch.else_block))
+                verr(v, fi, bi, "func '%s' block_%u: branch else target block_%u out of range",
+                     f->name, b->id, b->term.as.branch.else_block);
+            break;
+        case MIR_TERM_RETURN:
+        case MIR_TERM_HALT:
+            break;
+    }
+}
+
 MirValidation mir_validate(const MirModule* m) {
     MirValidation v;
     memset(&v, 0, sizeof(v));
@@ -258,59 +268,23 @@ MirValidation mir_validate(const MirModule* m) {
     for (uint32_t fi = 0; fi < m->func_count; ++fi) {
         const MirFunction* f = &m->functions[fi];
 
-        /* entry block must exist */
         if (f->block_count == 0) {
             verr(&v, fi, 0, "func '%s': no blocks", f->name);
             continue;
         }
         if (!block_id_valid(f, f->entry))
-            verr(&v, fi, 0, "func '%s': entry block %u out of range",
-                 f->name, f->entry);
+            verr(&v, fi, 0, "func '%s': entry block %u out of range", f->name, f->entry);
 
-        /* check for duplicate block IDs */
         for (uint32_t i = 0; i < f->block_count; ++i) {
             for (uint32_t j = i + 1; j < f->block_count; ++j) {
                 if (f->blocks[i].id == f->blocks[j].id)
-                    verr(&v, fi, i,
-                         "func '%s': duplicate block ID %u at indices %u and %u",
+                    verr(&v, fi, i, "func '%s': duplicate block ID %u at indices %u and %u",
                          f->name, f->blocks[i].id, i, j);
             }
         }
 
-        for (uint32_t bi = 0; bi < f->block_count; ++bi) {
-            const MirBlock* b = &f->blocks[bi];
-
-            /* every block must have a terminator */
-            if (!b->has_term) {
-                verr(&v, fi, bi,
-                     "func '%s' block_%u: missing terminator",
-                     f->name, b->id);
-                continue;
-            }
-
-            /* branch targets must reference valid blocks */
-            switch (b->term.kind) {
-                case MIR_TERM_GOTO:
-                    if (!block_id_valid(f, b->term.as.target))
-                        verr(&v, fi, bi,
-                             "func '%s' block_%u: goto target block_%u out of range",
-                             f->name, b->id, b->term.as.target);
-                    break;
-                case MIR_TERM_BRANCH:
-                    if (!block_id_valid(f, b->term.as.branch.then_block))
-                        verr(&v, fi, bi,
-                             "func '%s' block_%u: branch then target block_%u out of range",
-                             f->name, b->id, b->term.as.branch.then_block);
-                    if (!block_id_valid(f, b->term.as.branch.else_block))
-                        verr(&v, fi, bi,
-                             "func '%s' block_%u: branch else target block_%u out of range",
-                             f->name, b->id, b->term.as.branch.else_block);
-                    break;
-                case MIR_TERM_RETURN:
-                case MIR_TERM_HALT:
-                    break;
-            }
-        }
+        for (uint32_t bi = 0; bi < f->block_count; ++bi)
+            validate_block_term(f, &f->blocks[bi], fi, bi, &v);
     }
 
     return v;

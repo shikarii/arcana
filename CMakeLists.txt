@@ -42,6 +42,7 @@ target_include_directories(arcana_runtime PUBLIC src)
 # --- Library: arcana_vm ---
 add_library(arcana_vm STATIC
     src/vm/vm.c
+    src/vm/vm_ops.c
 )
 target_link_libraries(arcana_vm PUBLIC arcana_bytecode arcana_runtime)
 
@@ -73,6 +74,7 @@ target_include_directories(arcana_mir PUBLIC src)
 # --- Library: arcana_semantic ---
 add_library(arcana_semantic STATIC
     src/semantic/semantic.c
+    src/semantic/semantic_expr.c
 )
 target_link_libraries(arcana_semantic PUBLIC arcana_semantic_graph arcana_hir)
 
@@ -98,6 +100,16 @@ target_link_libraries(arcana_interpreter PUBLIC arcana_semantic_graph)
 add_executable(arcana_tests
     tests/test_all.c
     tests/test_runtime.c
+    tests/test_vm.c
+    tests/test_gc.c
+    tests/test_pipeline.c
+    tests/test_bytecode.c
+    tests/test_verifier.c
+    tests/test_graph.c
+    tests/test_infra.c
+    tests/test_pipeline_e2e.c
+    tests/test_vm_collections.c
+    tests/test_error_recovery.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode
@@ -143,3 +155,8 @@ target_link_libraries(arcana-bench
 
 enable_testing()
 add_test(NAME arcana_tests COMMAND arcana_tests)
+
+# --- LOC limit enforcement (600 lines/file, 60 lines/function) ---
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+add_test(NAME check_limits
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/check-limits.py" --root "${CMAKE_SOURCE_DIR}")

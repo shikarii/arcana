@@ -52,7 +52,7 @@ static void tc_error(TcCtx* ctx, ArcNodeId node_id, const char* fmt, ...) {
 }
 
 /* ===================================================================
- * Graph navigation helpers (same as compiler.c / semantic.c)
+ * Graph navigation helpers
  * =================================================================== */
 
 static ArcNodeId tc_find_source(const ArcGraph* g, ArcPortId input_port) {
@@ -83,227 +83,154 @@ static ArcType infer_type(TcCtx* ctx, ArcNodeId node_id);
 
 static ArcType infer_input(TcCtx* ctx, ArcNodeId node_id, const char* role) {
     ArcPortId port = tc_find_port(ctx->graph, node_id, role, ARC_PORT_INPUT);
-    if (port == ARC_INVALID_ID) {
+    if (port == ARC_INVALID_ID)
         port = tc_find_port(ctx->graph, node_id, "in", ARC_PORT_INPUT);
-    }
     if (port == ARC_INVALID_ID) return ARC_TYPE_UNKNOWN;
     ArcNodeId src = tc_find_source(ctx->graph, port);
     if (src == ARC_INVALID_ID) return ARC_TYPE_UNKNOWN;
     return infer_type(ctx, src);
 }
 
-/* Check if a type is numeric (i64 or f64) */
 static bool is_numeric(ArcType t) {
     return t == ARC_TYPE_I64 || t == ARC_TYPE_F64;
 }
 
+/* --- Infer type for ADD (polymorphic: numeric + string concatenation) --- */
+static ArcType infer_add(TcCtx* ctx, ArcNodeId node_id) {
+    ArcType lhs = infer_input(ctx, node_id, "lhs");
+    ArcType rhs = infer_input(ctx, node_id, "rhs");
+    if (lhs == ARC_TYPE_STRING && rhs == ARC_TYPE_STRING)
+        return ARC_TYPE_STRING;
+    if (is_numeric(lhs) && is_numeric(rhs))
+        return (lhs == ARC_TYPE_F64 || rhs == ARC_TYPE_F64) ? ARC_TYPE_F64 : ARC_TYPE_I64;
+    if (lhs == ARC_TYPE_ANY || rhs == ARC_TYPE_ANY)
+        return ARC_TYPE_ANY;
+    tc_error(ctx, node_id, "ADD requires numeric or string operands, got %s and %s",
+             arc_type_name(lhs), arc_type_name(rhs));
+    return ARC_TYPE_ANY;
+}
+
+/* --- Infer type for SUB/MUL/DIV/MOD (numeric only) --- */
+static ArcType infer_arith(TcCtx* ctx, ArcNodeId node_id, const ArcNode* n) {
+    ArcType lhs = infer_input(ctx, node_id, "lhs");
+    ArcType rhs = infer_input(ctx, node_id, "rhs");
+    if (is_numeric(lhs) && is_numeric(rhs))
+        return (lhs == ARC_TYPE_F64 || rhs == ARC_TYPE_F64) ? ARC_TYPE_F64 : ARC_TYPE_I64;
+    if (lhs == ARC_TYPE_ANY || rhs == ARC_TYPE_ANY)
+        return ARC_TYPE_ANY;
+    tc_error(ctx, node_id, "%s requires numeric operands, got %s and %s",
+             n->kind == ARC_NODE_SUB ? "SUB" :
+             n->kind == ARC_NODE_MUL ? "MUL" :
+             n->kind == ARC_NODE_DIV ? "DIV" : "MOD",
+             arc_type_name(lhs), arc_type_name(rhs));
+    return ARC_TYPE_ANY;
+}
+
+/* --- Infer type for comparison ops (LT/LE/GT/GE) --- */
+static ArcType infer_comparison(TcCtx* ctx, ArcNodeId node_id) {
+    ArcType lhs = infer_input(ctx, node_id, "lhs");
+    ArcType rhs = infer_input(ctx, node_id, "rhs");
+    if (!is_numeric(lhs) && lhs != ARC_TYPE_ANY)
+        tc_error(ctx, node_id, "comparison requires numeric operands, got %s", arc_type_name(lhs));
+    if (!is_numeric(rhs) && rhs != ARC_TYPE_ANY)
+        tc_error(ctx, node_id, "comparison requires numeric operands, got %s", arc_type_name(rhs));
+    return ARC_TYPE_BOOL;
+}
+
+/* --- Infer type for bitwise ops (i64 only) --- */
+static ArcType infer_bitwise_binary(TcCtx* ctx, ArcNodeId node_id) {
+    ArcType lhs = infer_input(ctx, node_id, "lhs");
+    ArcType rhs = infer_input(ctx, node_id, "rhs");
+    if (lhs != ARC_TYPE_I64 && lhs != ARC_TYPE_ANY)
+        tc_error(ctx, node_id, "bitwise op requires i64 operands, got %s", arc_type_name(lhs));
+    if (rhs != ARC_TYPE_I64 && rhs != ARC_TYPE_ANY)
+        tc_error(ctx, node_id, "bitwise op requires i64 operands, got %s", arc_type_name(rhs));
+    return ARC_TYPE_I64;
+}
+
+/* --- Infer type for unary numeric (NEG) --- */
+static ArcType infer_neg(TcCtx* ctx, ArcNodeId node_id) {
+    ArcType val = infer_input(ctx, node_id, "value");
+    if (is_numeric(val)) return val;
+    if (val == ARC_TYPE_ANY) return ARC_TYPE_ANY;
+    tc_error(ctx, node_id, "NEG requires numeric operand, got %s", arc_type_name(val));
+    return ARC_TYPE_ANY;
+}
+
+/* --- Infer type for bitwise NOT (i64 only) --- */
+static ArcType infer_bit_not(TcCtx* ctx, ArcNodeId node_id) {
+    ArcType val = infer_input(ctx, node_id, "value");
+    if (val != ARC_TYPE_I64 && val != ARC_TYPE_ANY)
+        tc_error(ctx, node_id, "BIT_NOT requires i64 operand, got %s", arc_type_name(val));
+    return ARC_TYPE_I64;
+}
+
+/* --- Infer type for STR_LEN --- */
+static ArcType infer_str_len(TcCtx* ctx, ArcNodeId node_id) {
+    ArcType val = infer_input(ctx, node_id, "value");
+    if (val != ARC_TYPE_STRING && val != ARC_TYPE_ANY)
+        tc_error(ctx, node_id, "STR_LEN requires string, got %s", arc_type_name(val));
+    return ARC_TYPE_I64;
+}
+
+/* --- Infer type for nodes needing no deep analysis --- */
+static ArcType infer_simple_kind(TcCtx* ctx, ArcNodeId node_id, const ArcNode* n) {
+    switch (n->kind) {
+    case ARC_NODE_EQ: case ARC_NODE_NEQ:
+        infer_input(ctx, node_id, "lhs"); infer_input(ctx, node_id, "rhs");
+        return ARC_TYPE_BOOL;
+    case ARC_NODE_NOT: infer_input(ctx, node_id, "value"); return ARC_TYPE_BOOL;
+    case ARC_NODE_AND: case ARC_NODE_OR:
+        infer_input(ctx, node_id, "lhs"); infer_input(ctx, node_id, "rhs");
+        return ARC_TYPE_ANY;
+    case ARC_NODE_CAST_I64:  infer_input(ctx, node_id, "value"); return ARC_TYPE_I64;
+    case ARC_NODE_CAST_F64:  infer_input(ctx, node_id, "value"); return ARC_TYPE_F64;
+    case ARC_NODE_CAST_STR:  infer_input(ctx, node_id, "value"); return ARC_TYPE_STRING;
+    case ARC_NODE_STR_SLICE: case ARC_NODE_STR_INDEX: return ARC_TYPE_STRING;
+    case ARC_NODE_LENGTH: infer_input(ctx, node_id, "value"); return ARC_TYPE_I64;
+    case ARC_NODE_ARRAY_LITERAL: return ARC_TYPE_ARRAY;
+    case ARC_NODE_MAP_LITERAL:   return ARC_TYPE_MAP;
+    case ARC_NODE_INDEX_GET:     return ARC_TYPE_ANY;
+    case ARC_NODE_INDEX_SET:     return ARC_TYPE_NULL;
+    case ARC_NODE_IF: case ARC_NODE_WHILE: case ARC_NODE_LET:
+    case ARC_NODE_ASSIGN: case ARC_NODE_SEQUENCE:
+    case ARC_NODE_ROOT_OUTPUT: case ARC_NODE_PRINT: return ARC_TYPE_NULL;
+    case ARC_NODE_VAR_REF: case ARC_NODE_FUNC_CALL:
+    case ARC_NODE_INTRINSIC_CALL: case ARC_NODE_PARAM: return ARC_TYPE_ANY;
+    case ARC_NODE_FUNC_DEF: case ARC_NODE_CLOSURE: return ARC_TYPE_CLOSURE;
+    case ARC_NODE_RETURN: case ARC_NODE_THROW:
+        infer_input(ctx, node_id, "value"); return ARC_TYPE_NULL;
+    case ARC_NODE_TRY: return ARC_TYPE_NULL;
+    default: return ARC_TYPE_ANY;
+    }
+}
+
+/* --- Main infer_type function --- */
 static ArcType infer_type(TcCtx* ctx, ArcNodeId node_id) {
     if (node_id >= ctx->graph->node_count) return ARC_TYPE_UNKNOWN;
     if (ctx->types[node_id] != ARC_TYPE_UNKNOWN) return ctx->types[node_id];
 
     const ArcNode* n = &ctx->graph->nodes[node_id];
-    ArcType result = ARC_TYPE_ANY;
+    ArcType result;
 
     switch (n->kind) {
-    /* Literals */
     case ARC_NODE_CONST_INT:    result = ARC_TYPE_I64; break;
     case ARC_NODE_CONST_FLOAT:  result = ARC_TYPE_F64; break;
     case ARC_NODE_CONST_BOOL:   result = ARC_TYPE_BOOL; break;
     case ARC_NODE_CONST_NULL:   result = ARC_TYPE_NULL; break;
     case ARC_NODE_CONST_STRING: result = ARC_TYPE_STRING; break;
-
-    /* Arithmetic — requires numeric, promotes to f64 if mixed */
-    case ARC_NODE_ADD: {
-        ArcType lhs = infer_input(ctx, node_id, "lhs");
-        ArcType rhs = infer_input(ctx, node_id, "rhs");
-        /* ADD is polymorphic: i64+i64=i64, f64+f64=f64, string+string=string */
-        if (lhs == ARC_TYPE_STRING && rhs == ARC_TYPE_STRING) {
-            result = ARC_TYPE_STRING;
-        } else if (is_numeric(lhs) && is_numeric(rhs)) {
-            result = (lhs == ARC_TYPE_F64 || rhs == ARC_TYPE_F64)
-                     ? ARC_TYPE_F64 : ARC_TYPE_I64;
-        } else if (lhs == ARC_TYPE_ANY || rhs == ARC_TYPE_ANY) {
-            result = ARC_TYPE_ANY;
-        } else {
-            tc_error(ctx, node_id, "ADD requires numeric or string operands, got %s and %s",
-                     arc_type_name(lhs), arc_type_name(rhs));
-        }
-        break;
-    }
-    case ARC_NODE_SUB: case ARC_NODE_MUL: case ARC_NODE_DIV: case ARC_NODE_MOD: {
-        ArcType lhs = infer_input(ctx, node_id, "lhs");
-        ArcType rhs = infer_input(ctx, node_id, "rhs");
-        if (is_numeric(lhs) && is_numeric(rhs)) {
-            result = (lhs == ARC_TYPE_F64 || rhs == ARC_TYPE_F64)
-                     ? ARC_TYPE_F64 : ARC_TYPE_I64;
-        } else if (lhs == ARC_TYPE_ANY || rhs == ARC_TYPE_ANY) {
-            result = ARC_TYPE_ANY;
-        } else {
-            tc_error(ctx, node_id, "%s requires numeric operands, got %s and %s",
-                     n->kind == ARC_NODE_SUB ? "SUB" :
-                     n->kind == ARC_NODE_MUL ? "MUL" :
-                     n->kind == ARC_NODE_DIV ? "DIV" : "MOD",
-                     arc_type_name(lhs), arc_type_name(rhs));
-        }
-        break;
-    }
-
-    /* Unary negate — numeric */
-    case ARC_NODE_NEG: {
-        ArcType val = infer_input(ctx, node_id, "value");
-        if (is_numeric(val)) {
-            result = val;
-        } else if (val == ARC_TYPE_ANY) {
-            result = ARC_TYPE_ANY;
-        } else {
-            tc_error(ctx, node_id, "NEG requires numeric operand, got %s",
-                     arc_type_name(val));
-        }
-        break;
-    }
-
-    /* Comparisons — numeric, produce bool */
-    case ARC_NODE_LT: case ARC_NODE_LE: case ARC_NODE_GT: case ARC_NODE_GE: {
-        ArcType lhs = infer_input(ctx, node_id, "lhs");
-        ArcType rhs = infer_input(ctx, node_id, "rhs");
-        if (!is_numeric(lhs) && lhs != ARC_TYPE_ANY)
-            tc_error(ctx, node_id, "comparison requires numeric operands, got %s", arc_type_name(lhs));
-        if (!is_numeric(rhs) && rhs != ARC_TYPE_ANY)
-            tc_error(ctx, node_id, "comparison requires numeric operands, got %s", arc_type_name(rhs));
-        result = ARC_TYPE_BOOL;
-        break;
-    }
-
-    /* Equality — any types, produce bool */
-    case ARC_NODE_EQ: case ARC_NODE_NEQ:
-        infer_input(ctx, node_id, "lhs");
-        infer_input(ctx, node_id, "rhs");
-        result = ARC_TYPE_BOOL;
-        break;
-
-    /* Logical */
-    case ARC_NODE_NOT:
-        infer_input(ctx, node_id, "value");
-        result = ARC_TYPE_BOOL;
-        break;
-
-    case ARC_NODE_AND: case ARC_NODE_OR:
-        /* Short-circuit: result type is type of RHS (or LHS on short-circuit) */
-        infer_input(ctx, node_id, "lhs");
-        infer_input(ctx, node_id, "rhs");
-        result = ARC_TYPE_ANY;
-        break;
-
-    /* Bitwise — i64 only */
+    case ARC_NODE_ADD:  result = infer_add(ctx, node_id); break;
+    case ARC_NODE_SUB: case ARC_NODE_MUL: case ARC_NODE_DIV: case ARC_NODE_MOD:
+        result = infer_arith(ctx, node_id, n); break;
+    case ARC_NODE_NEG:  result = infer_neg(ctx, node_id); break;
+    case ARC_NODE_LT: case ARC_NODE_LE: case ARC_NODE_GT: case ARC_NODE_GE:
+        result = infer_comparison(ctx, node_id); break;
     case ARC_NODE_BIT_AND: case ARC_NODE_BIT_OR: case ARC_NODE_BIT_XOR:
-    case ARC_NODE_SHL: case ARC_NODE_SHR: {
-        ArcType lhs = infer_input(ctx, node_id, "lhs");
-        ArcType rhs = infer_input(ctx, node_id, "rhs");
-        if (lhs != ARC_TYPE_I64 && lhs != ARC_TYPE_ANY)
-            tc_error(ctx, node_id, "bitwise op requires i64 operands, got %s", arc_type_name(lhs));
-        if (rhs != ARC_TYPE_I64 && rhs != ARC_TYPE_ANY)
-            tc_error(ctx, node_id, "bitwise op requires i64 operands, got %s", arc_type_name(rhs));
-        result = ARC_TYPE_I64;
-        break;
-    }
-    case ARC_NODE_BIT_NOT: {
-        ArcType val = infer_input(ctx, node_id, "value");
-        if (val != ARC_TYPE_I64 && val != ARC_TYPE_ANY)
-            tc_error(ctx, node_id, "BIT_NOT requires i64 operand, got %s", arc_type_name(val));
-        result = ARC_TYPE_I64;
-        break;
-    }
-
-    /* Type casts */
-    case ARC_NODE_CAST_I64:
-        infer_input(ctx, node_id, "value");
-        result = ARC_TYPE_I64;
-        break;
-    case ARC_NODE_CAST_F64:
-        infer_input(ctx, node_id, "value");
-        result = ARC_TYPE_F64;
-        break;
-    case ARC_NODE_CAST_STR:
-        infer_input(ctx, node_id, "value");
-        result = ARC_TYPE_STRING;
-        break;
-
-    /* String ops */
-    case ARC_NODE_STR_LEN: {
-        ArcType val = infer_input(ctx, node_id, "value");
-        if (val != ARC_TYPE_STRING && val != ARC_TYPE_ANY)
-            tc_error(ctx, node_id, "STR_LEN requires string, got %s", arc_type_name(val));
-        result = ARC_TYPE_I64;
-        break;
-    }
-    case ARC_NODE_STR_SLICE:
-        result = ARC_TYPE_STRING;
-        break;
-    case ARC_NODE_STR_INDEX:
-        result = ARC_TYPE_STRING;
-        break;
-    case ARC_NODE_LENGTH:
-        infer_input(ctx, node_id, "value");
-        result = ARC_TYPE_I64;
-        break;
-
-    /* Collections */
-    case ARC_NODE_ARRAY_LITERAL:
-        result = ARC_TYPE_ARRAY;
-        break;
-    case ARC_NODE_MAP_LITERAL:
-        result = ARC_TYPE_MAP;
-        break;
-    case ARC_NODE_INDEX_GET:
-        result = ARC_TYPE_ANY;
-        break;
-    case ARC_NODE_INDEX_SET:
-        result = ARC_TYPE_NULL;
-        break;
-
-    /* Control flow / bindings — no specific type */
-    case ARC_NODE_IF: case ARC_NODE_WHILE:
-    case ARC_NODE_LET: case ARC_NODE_ASSIGN:
-    case ARC_NODE_SEQUENCE: case ARC_NODE_ROOT_OUTPUT:
-    case ARC_NODE_PRINT:
-        result = ARC_TYPE_NULL;
-        break;
-
-    case ARC_NODE_VAR_REF:
-        result = ARC_TYPE_ANY;
-        break;
-
-    case ARC_NODE_FUNC_DEF:
-    case ARC_NODE_CLOSURE:
-        result = ARC_TYPE_CLOSURE;
-        break;
-
-    case ARC_NODE_FUNC_CALL:
-    case ARC_NODE_INTRINSIC_CALL:
-        result = ARC_TYPE_ANY;
-        break;
-
-    case ARC_NODE_PARAM:
-        result = ARC_TYPE_ANY;
-        break;
-
-    case ARC_NODE_RETURN:
-        infer_input(ctx, node_id, "value");
-        result = ARC_TYPE_NULL;
-        break;
-
-    case ARC_NODE_TRY:
-        result = ARC_TYPE_NULL;
-        break;
-
-    case ARC_NODE_THROW:
-        infer_input(ctx, node_id, "value");
-        result = ARC_TYPE_NULL;
-        break;
-
-    default:
-        result = ARC_TYPE_ANY;
-        break;
+    case ARC_NODE_SHL: case ARC_NODE_SHR:
+        result = infer_bitwise_binary(ctx, node_id); break;
+    case ARC_NODE_BIT_NOT: result = infer_bit_not(ctx, node_id); break;
+    case ARC_NODE_STR_LEN: result = infer_str_len(ctx, node_id); break;
+    default: result = infer_simple_kind(ctx, node_id, n); break;
     }
 
     ctx->types[node_id] = result;
@@ -333,10 +260,8 @@ ArcTypeCheckResult arc_typecheck(const ArcGraph* graph) {
     ctx.types = result.node_types;
     ctx.had_error = false;
 
-    /* Infer types for all nodes */
-    for (uint32_t i = 0; i < graph->node_count; i++) {
+    for (uint32_t i = 0; i < graph->node_count; i++)
         infer_type(&ctx, i);
-    }
 
     result.success = !ctx.had_error;
     return result;

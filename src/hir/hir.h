@@ -32,6 +32,7 @@ typedef enum {
     HIR_VAR_LOAD,       /* read a local variable */
     HIR_CALL,           /* function call */
     HIR_INTRINSIC,      /* intrinsic call */
+    HIR_POISON,         /* error recovery: placeholder for failed lowering */
 } HirExprKind;
 
 /* HIR statement kinds */
@@ -138,6 +139,7 @@ void hir_dump_block(const HirBlock* b, FILE* out, int indent);
 
 /* Allocation helpers */
 HirExpr* hir_expr_new(HirExprKind kind, ArcElementId src);
+void     hir_expr_free(HirExpr* e);
 HirStmt* hir_block_add(HirBlock* b, HirStmtKind kind, ArcElementId src);
 
 /* Validation */

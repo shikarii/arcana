@@ -116,87 +116,79 @@ static void vadd(ArcGraphValidation* v, const char* fmt, ...) {
     v->valid = false;
 }
 
-ArcGraphValidation arc_graph_validate(const ArcGraph* g) {
-    ArcGraphValidation v = { .errors = NULL, .count = 0, .cap = 0, .valid = true };
-
-    if (g->root_region == ARC_INVALID_ID)
-        vadd(&v, "no root region defined");
-
-    /* Check region parentage is acyclic */
+/* --- Validate regions: parentage acyclicity + sequential IDs --- */
+static void validate_regions(const ArcGraph* g, ArcGraphValidation* v) {
     for (uint32_t i = 0; i < g->region_count; i++) {
+        if (g->regions[i].id != i)
+            vadd(v, "region at index %u has mismatched id %u", i, g->regions[i].id);
         if (g->regions[i].parent != ARC_INVALID_ID && g->regions[i].parent >= g->region_count)
-            vadd(&v, "region %u has invalid parent %u", i, g->regions[i].parent);
-        /* Simple cycle check: walk parent chain, max depth = region_count */
+            vadd(v, "region %u has invalid parent %u", i, g->regions[i].parent);
         ArcRegionId cur = g->regions[i].parent;
         for (uint32_t depth = 0; cur != ARC_INVALID_ID && depth < g->region_count; depth++) {
-            if (cur == i) { vadd(&v, "region %u has cyclic ancestry", i); break; }
+            if (cur == i) { vadd(v, "region %u has cyclic ancestry", i); break; }
             if (cur >= g->region_count) break;
             cur = g->regions[cur].parent;
         }
     }
+}
 
-    /* Check node IDs are unique and sequential */
+/* --- Validate nodes: IDs, regions, cyclic order --- */
+static void validate_nodes(const ArcGraph* g, ArcGraphValidation* v) {
     for (uint32_t i = 0; i < g->node_count; i++) {
         if (g->nodes[i].id != i)
-            vadd(&v, "node at index %u has mismatched id %u", i, g->nodes[i].id);
-    }
-
-    /* Check nodes */
-    for (uint32_t i = 0; i < g->node_count; i++) {
+            vadd(v, "node at index %u has mismatched id %u", i, g->nodes[i].id);
         const ArcNode* n = &g->nodes[i];
         if (n->region >= g->region_count)
-            vadd(&v, "node %u has invalid region %u", i, n->region);
-
-        /* Cyclic order must contain exactly the node's ports */
+            vadd(v, "node %u has invalid region %u", i, n->region);
         if (n->cyclic_count > 0) {
             if (n->cyclic_count != n->port_count)
-                vadd(&v, "node %u cyclic order count %u != port count %u",
+                vadd(v, "node %u cyclic order count %u != port count %u",
                      i, n->cyclic_count, n->port_count);
-            /* Each port must appear exactly once in cyclic order */
             for (uint32_t ci = 0; ci < n->cyclic_count; ci++) {
                 bool found = false;
                 for (uint32_t pi = 0; pi < n->port_count; pi++) {
                     if (n->cyclic_order[ci] == n->ports[pi]) { found = true; break; }
                 }
                 if (!found)
-                    vadd(&v, "node %u cyclic order entry %u references unknown port %u",
+                    vadd(v, "node %u cyclic order entry %u references unknown port %u",
                          i, ci, n->cyclic_order[ci]);
             }
         }
     }
+}
 
-    /* Check edges */
+/* --- Validate edges and ports --- */
+static void validate_edges_and_ports(const ArcGraph* g, ArcGraphValidation* v) {
     for (uint32_t i = 0; i < g->edge_count; i++) {
         const ArcSemEdge* e = &g->edges[i];
+        if (e->id != i)
+            vadd(v, "edge at index %u has mismatched id %u", i, e->id);
         if (e->from >= g->port_count)
-            vadd(&v, "edge %u has invalid source port %u", i, e->from);
+            vadd(v, "edge %u has invalid source port %u", i, e->from);
         if (e->to >= g->port_count)
-            vadd(&v, "edge %u has invalid target port %u", i, e->to);
+            vadd(v, "edge %u has invalid target port %u", i, e->to);
         if (e->from < g->port_count && g->ports[e->from].dir != ARC_PORT_OUTPUT)
-            vadd(&v, "edge %u source port %u is not an output", i, e->from);
+            vadd(v, "edge %u source port %u is not an output", i, e->from);
         if (e->to < g->port_count && g->ports[e->to].dir != ARC_PORT_INPUT)
-            vadd(&v, "edge %u target port %u is not an input", i, e->to);
+            vadd(v, "edge %u target port %u is not an input", i, e->to);
     }
-
-    /* Check port IDs are unique and sequential */
     for (uint32_t i = 0; i < g->port_count; i++) {
         if (g->ports[i].id != i)
-            vadd(&v, "port at index %u has mismatched id %u", i, g->ports[i].id);
+            vadd(v, "port at index %u has mismatched id %u", i, g->ports[i].id);
         if (g->ports[i].owner >= g->node_count)
-            vadd(&v, "port %u has invalid owner node %u", i, g->ports[i].owner);
+            vadd(v, "port %u has invalid owner node %u", i, g->ports[i].owner);
     }
+}
 
-    /* Check region IDs are unique and sequential */
-    for (uint32_t i = 0; i < g->region_count; i++) {
-        if (g->regions[i].id != i)
-            vadd(&v, "region at index %u has mismatched id %u", i, g->regions[i].id);
-    }
+ArcGraphValidation arc_graph_validate(const ArcGraph* g) {
+    ArcGraphValidation v = { .errors = NULL, .count = 0, .cap = 0, .valid = true };
 
-    /* Check edge IDs are unique and sequential */
-    for (uint32_t i = 0; i < g->edge_count; i++) {
-        if (g->edges[i].id != i)
-            vadd(&v, "edge at index %u has mismatched id %u", i, g->edges[i].id);
-    }
+    if (g->root_region == ARC_INVALID_ID)
+        vadd(&v, "no root region defined");
+
+    validate_regions(g, &v);
+    validate_nodes(g, &v);
+    validate_edges_and_ports(g, &v);
 
     return v;
 }

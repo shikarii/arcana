@@ -232,6 +232,63 @@ static bool read_f64(Reader* r, double* v) {
     memcpy(v, &i, 8); return true;
 }
 
+/* --- Read constant pool section --- */
+static ArcStatus read_constants(Reader* r, ArcConstPool* pool, uint16_t count) {
+    for (uint16_t i = 0; i < count; i++) {
+        uint8_t tag;
+        if (!read_u8(r, &tag)) return ARC_ERR_FORMAT;
+        switch (tag) {
+        case ARC_CONST_NULL: arc_const_pool_add_null(pool); break;
+        case ARC_CONST_BOOL: {
+            uint8_t v; if (!read_u8(r, &v)) return ARC_ERR_FORMAT;
+            arc_const_pool_add_bool(pool, v != 0); break;
+        }
+        case ARC_CONST_I64: {
+            int64_t v; if (!read_i64(r, &v)) return ARC_ERR_FORMAT;
+            arc_const_pool_add_i64(pool, v); break;
+        }
+        case ARC_CONST_F64: {
+            double v; if (!read_f64(r, &v)) return ARC_ERR_FORMAT;
+            arc_const_pool_add_f64(pool, v); break;
+        }
+        case ARC_CONST_STRING: {
+            uint32_t slen; if (!read_u32(r, &slen)) return ARC_ERR_FORMAT;
+            if (r->p + slen > r->end) return ARC_ERR_FORMAT;
+            arc_const_pool_add_string(pool, (const char*)r->p, slen);
+            r->p += slen; break;
+        }
+        default: return ARC_ERR_FORMAT;
+        }
+    }
+    return ARC_OK;
+}
+
+/* --- Read function table section --- */
+static ArcStatus read_functions(Reader* r, ArcFuncTable* table, uint16_t count) {
+    for (uint16_t i = 0; i < count; i++) {
+        ArcFuncRecord fr;
+        memset(&fr, 0, sizeof(fr));
+        if (!read_u16(r, &fr.name_const_idx)) return ARC_ERR_FORMAT;
+        if (!read_u8(r, &fr.arity)) return ARC_ERR_FORMAT;
+        if (!read_u16(r, &fr.local_count)) return ARC_ERR_FORMAT;
+        if (!read_u16(r, &fr.max_stack)) return ARC_ERR_FORMAT;
+        if (!read_u32(r, &fr.code_offset)) return ARC_ERR_FORMAT;
+        if (!read_u32(r, &fr.code_length)) return ARC_ERR_FORMAT;
+        if (!read_u8(r, &fr.upvalue_count)) return ARC_ERR_FORMAT;
+        if (fr.upvalue_count > 0) {
+            fr.upvalues = ARC_ALLOC(ArcUpvalueDesc, fr.upvalue_count);
+            for (uint8_t u = 0; u < fr.upvalue_count; u++) {
+                uint8_t is_local;
+                if (!read_u8(r, &is_local)) return ARC_ERR_FORMAT;
+                fr.upvalues[u].is_local = (is_local != 0);
+                if (!read_u16(r, &fr.upvalues[u].index)) return ARC_ERR_FORMAT;
+            }
+        }
+        arc_func_table_add(table, fr);
+    }
+    return ARC_OK;
+}
+
 ArcStatus arc_image_read(const uint8_t* data, size_t len, ArcBytecodeImage* img) {
     arc_image_init(img);
     Reader r = { data, data + len };
@@ -247,56 +304,9 @@ ArcStatus arc_image_read(const uint8_t* data, size_t len, ArcBytecodeImage* img)
     if (!read_u16(&r, &flags)) return ARC_ERR_FORMAT;
     if (!read_u16(&r, &const_count) || !read_u16(&r, &func_count)) return ARC_ERR_FORMAT;
 
-    /* Constants */
-    for (uint16_t i = 0; i < const_count; i++) {
-        uint8_t tag;
-        if (!read_u8(&r, &tag)) return ARC_ERR_FORMAT;
-        switch (tag) {
-        case ARC_CONST_NULL: arc_const_pool_add_null(&img->constants); break;
-        case ARC_CONST_BOOL: {
-            uint8_t v; if (!read_u8(&r, &v)) return ARC_ERR_FORMAT;
-            arc_const_pool_add_bool(&img->constants, v != 0); break;
-        }
-        case ARC_CONST_I64: {
-            int64_t v; if (!read_i64(&r, &v)) return ARC_ERR_FORMAT;
-            arc_const_pool_add_i64(&img->constants, v); break;
-        }
-        case ARC_CONST_F64: {
-            double v; if (!read_f64(&r, &v)) return ARC_ERR_FORMAT;
-            arc_const_pool_add_f64(&img->constants, v); break;
-        }
-        case ARC_CONST_STRING: {
-            uint32_t slen; if (!read_u32(&r, &slen)) return ARC_ERR_FORMAT;
-            if (r.p + slen > r.end) return ARC_ERR_FORMAT;
-            arc_const_pool_add_string(&img->constants, (const char*)r.p, slen);
-            r.p += slen; break;
-        }
-        default: return ARC_ERR_FORMAT;
-        }
-    }
-
-    /* Functions */
-    for (uint16_t i = 0; i < func_count; i++) {
-        ArcFuncRecord fr;
-        memset(&fr, 0, sizeof(fr));
-        if (!read_u16(&r, &fr.name_const_idx)) return ARC_ERR_FORMAT;
-        if (!read_u8(&r, &fr.arity)) return ARC_ERR_FORMAT;
-        if (!read_u16(&r, &fr.local_count)) return ARC_ERR_FORMAT;
-        if (!read_u16(&r, &fr.max_stack)) return ARC_ERR_FORMAT;
-        if (!read_u32(&r, &fr.code_offset)) return ARC_ERR_FORMAT;
-        if (!read_u32(&r, &fr.code_length)) return ARC_ERR_FORMAT;
-        if (!read_u8(&r, &fr.upvalue_count)) return ARC_ERR_FORMAT;
-        if (fr.upvalue_count > 0) {
-            fr.upvalues = ARC_ALLOC(ArcUpvalueDesc, fr.upvalue_count);
-            for (uint8_t u = 0; u < fr.upvalue_count; u++) {
-                uint8_t is_local;
-                if (!read_u8(&r, &is_local)) return ARC_ERR_FORMAT;
-                fr.upvalues[u].is_local = (is_local != 0);
-                if (!read_u16(&r, &fr.upvalues[u].index)) return ARC_ERR_FORMAT;
-            }
-        }
-        arc_func_table_add(&img->functions, fr);
-    }
+    ArcStatus s;
+    if ((s = read_constants(&r, &img->constants, const_count)) != ARC_OK) return s;
+    if ((s = read_functions(&r, &img->functions, func_count)) != ARC_OK) return s;
 
     /* Code */
     uint32_t clen;
@@ -307,9 +317,9 @@ ArcStatus arc_image_read(const uint8_t* data, size_t len, ArcBytecodeImage* img)
     img->code_len = clen;
     r.p += clen;
 
-    /* Debug (optional — if data remains) */
-    uint32_t dcount = 0;
+    /* Debug (optional) */
     if (r.p < r.end) {
+        uint32_t dcount;
         if (!read_u32(&r, &dcount)) return ARC_ERR_FORMAT;
         for (uint32_t i = 0; i < dcount; i++) {
             ArcDebugEntry de;
