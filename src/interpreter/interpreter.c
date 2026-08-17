@@ -2,7 +2,7 @@
 #include <stdarg.h>
 
 /*
- * Reference interpreter — walks the semantic graph directly.
+ * Reference interpreter -- walks the semantic graph directly.
  * Used for differential testing against the compiler -> VM pipeline.
  */
 
@@ -12,7 +12,7 @@ typedef struct {
 } InterpVar;
 
 typedef struct {
-    uint32_t base_var;  /* variable stack base for this frame */
+    uint32_t base_var;
 } InterpFrame;
 
 typedef struct {
@@ -62,12 +62,10 @@ static ArcValue get_var(Interp* ip, const char* name) {
 /* Forward declaration */
 static ArcValue eval_node(Interp* ip, ArcNodeId node_id);
 
-/* Find the source node connected to a given input port */
 static ArcNodeId find_source(const ArcGraph* g, ArcPortId input_port) {
     for (uint32_t i = 0; i < g->edge_count; i++) {
-        if (g->edges[i].to == input_port) {
+        if (g->edges[i].to == input_port)
             return g->ports[g->edges[i].from].owner;
-        }
     }
     return ARC_INVALID_ID;
 }
@@ -93,8 +91,6 @@ static ArcValue eval_input(Interp* ip, ArcNodeId nid, const char* role) {
 
 static ArcValue eval_binary_lhs_rhs(Interp* ip, ArcNodeId nid, ArcValue* lhs, ArcValue* rhs) {
     const ArcNode* n = &ip->graph->nodes[nid];
-
-    /* Use cyclic order if available */
     if (n->cyclic_count >= 2) {
         int input_idx = 0;
         for (uint32_t i = 0; i < n->cyclic_count && input_idx < 2; i++) {
@@ -115,6 +111,116 @@ static ArcValue eval_binary_lhs_rhs(Interp* ip, ArcNodeId nid, ArcValue* lhs, Ar
 
 static void exec_region_stmts(Interp* ip, ArcRegionId rid);
 
+/* --- Evaluate arithmetic binary ops --- */
+static ArcValue eval_arith(Interp* ip, ArcNodeId node_id, const ArcNode* n) {
+    ArcValue lhs, rhs;
+    eval_binary_lhs_rhs(ip, node_id, &lhs, &rhs);
+    if (lhs.tag == VAL_I64 && rhs.tag == VAL_I64) {
+        switch (n->kind) {
+        case ARC_NODE_ADD: return arc_val_i64(lhs.as.i64 + rhs.as.i64);
+        case ARC_NODE_SUB: return arc_val_i64(lhs.as.i64 - rhs.as.i64);
+        case ARC_NODE_MUL: return arc_val_i64(lhs.as.i64 * rhs.as.i64);
+        case ARC_NODE_DIV:
+            if (rhs.as.i64 == 0) { ierr(ip, "division by zero"); return arc_val_null(); }
+            return arc_val_i64(lhs.as.i64 / rhs.as.i64);
+        case ARC_NODE_MOD:
+            if (rhs.as.i64 == 0) { ierr(ip, "modulo by zero"); return arc_val_null(); }
+            return arc_val_i64(lhs.as.i64 % rhs.as.i64);
+        default: break;
+        }
+    } else if (lhs.tag == VAL_F64 && rhs.tag == VAL_F64) {
+        switch (n->kind) {
+        case ARC_NODE_ADD: return arc_val_f64(lhs.as.f64 + rhs.as.f64);
+        case ARC_NODE_SUB: return arc_val_f64(lhs.as.f64 - rhs.as.f64);
+        case ARC_NODE_MUL: return arc_val_f64(lhs.as.f64 * rhs.as.f64);
+        case ARC_NODE_DIV: return arc_val_f64(lhs.as.f64 / rhs.as.f64);
+        default: break;
+        }
+    }
+    ierr(ip, "type mismatch in arithmetic"); return arc_val_null();
+}
+
+/* --- Evaluate comparison binary ops --- */
+static ArcValue eval_comparison(Interp* ip, ArcNodeId node_id, const ArcNode* n) {
+    ArcValue lhs, rhs;
+    eval_binary_lhs_rhs(ip, node_id, &lhs, &rhs);
+    if (n->kind == ARC_NODE_EQ)  return arc_val_bool(arc_val_equal(lhs, rhs));
+    if (n->kind == ARC_NODE_NEQ) return arc_val_bool(!arc_val_equal(lhs, rhs));
+    if (lhs.tag == VAL_I64 && rhs.tag == VAL_I64) {
+        switch (n->kind) {
+        case ARC_NODE_LT: return arc_val_bool(lhs.as.i64 < rhs.as.i64);
+        case ARC_NODE_LE: return arc_val_bool(lhs.as.i64 <= rhs.as.i64);
+        case ARC_NODE_GT: return arc_val_bool(lhs.as.i64 > rhs.as.i64);
+        case ARC_NODE_GE: return arc_val_bool(lhs.as.i64 >= rhs.as.i64);
+        default: break;
+        }
+    } else if (lhs.tag == VAL_F64 && rhs.tag == VAL_F64) {
+        switch (n->kind) {
+        case ARC_NODE_LT: return arc_val_bool(lhs.as.f64 < rhs.as.f64);
+        case ARC_NODE_LE: return arc_val_bool(lhs.as.f64 <= rhs.as.f64);
+        case ARC_NODE_GT: return arc_val_bool(lhs.as.f64 > rhs.as.f64);
+        case ARC_NODE_GE: return arc_val_bool(lhs.as.f64 >= rhs.as.f64);
+        default: break;
+        }
+    }
+    ierr(ip, "type mismatch in comparison"); return arc_val_null();
+}
+
+/* --- Evaluate function call --- */
+static ArcValue eval_func_call(Interp* ip, ArcNodeId node_id, const ArcNode* n) {
+    const char* fname = n->attr.name;
+    ArcNodeId func_def = ARC_INVALID_ID;
+    for (uint32_t i = 0; i < ip->graph->node_count; i++) {
+        if (ip->graph->nodes[i].kind == ARC_NODE_FUNC_DEF &&
+            strcmp(ip->graph->nodes[i].attr.func.name, fname) == 0) {
+            func_def = i; break;
+        }
+    }
+    if (func_def == ARC_INVALID_ID) {
+        ierr(ip, "undefined function '%s'", fname); return arc_val_null();
+    }
+
+    const ArcNode* fdef = &ip->graph->nodes[func_def];
+    ArcValue args[16]; uint8_t argc = 0;
+    if (n->cyclic_count > 0) {
+        for (uint32_t i = 0; i < n->cyclic_count && argc < 16; i++) {
+            const ArcPort* p = &ip->graph->ports[n->cyclic_order[i]];
+            if (p->dir == ARC_PORT_INPUT) {
+                ArcNodeId src = find_source(ip->graph, p->id);
+                args[argc++] = (src != ARC_INVALID_ID) ? eval_node(ip, src) : arc_val_null();
+            }
+        }
+    } else {
+        for (uint32_t i = 0; i < n->port_count && argc < 16; i++) {
+            const ArcPort* p = &ip->graph->ports[n->ports[i]];
+            if (p->dir == ARC_PORT_INPUT) {
+                ArcNodeId src = find_source(ip->graph, p->id);
+                args[argc++] = (src != ARC_INVALID_ID) ? eval_node(ip, src) : arc_val_null();
+            }
+        }
+    }
+
+    if (ip->fp >= ARC_INTERP_FRAMES_MAX) { ierr(ip, "call stack overflow"); return arc_val_null(); }
+    ip->frames[ip->fp++] = (InterpFrame){ .base_var = ip->var_count };
+
+    ArcRegionId body_rid = fdef->attr.func.body_region;
+    const ArcRegion* body = &ip->graph->regions[body_rid];
+    uint8_t pi = 0;
+    for (uint32_t i = 0; i < body->member_count && pi < argc; i++) {
+        if (ip->graph->nodes[body->members[i]].kind == ARC_NODE_PARAM)
+            set_var(ip, ip->graph->nodes[body->members[i]].attr.name, args[pi++]);
+    }
+
+    ip->returned = false;
+    exec_region_stmts(ip, body_rid);
+    ArcValue ret = ip->result;
+    ip->returned = false;
+
+    ip->fp--;
+    ip->var_count = ip->frames[ip->fp].base_var;
+    return ret;
+}
+
 static ArcValue eval_node(Interp* ip, ArcNodeId node_id) {
     if (ip->had_error || ip->returned) return arc_val_null();
     if (node_id >= ip->graph->node_count) {
@@ -127,64 +233,16 @@ static ArcValue eval_node(Interp* ip, ArcNodeId node_id) {
     case ARC_NODE_CONST_FLOAT: return arc_val_f64(n->attr.float_value);
     case ARC_NODE_CONST_BOOL:  return arc_val_bool(n->attr.bool_value);
     case ARC_NODE_CONST_NULL:  return arc_val_null();
-
-    case ARC_NODE_VAR_REF: return get_var(ip, n->attr.name);
+    case ARC_NODE_VAR_REF:     return get_var(ip, n->attr.name);
 
     case ARC_NODE_ADD: case ARC_NODE_SUB: case ARC_NODE_MUL:
-    case ARC_NODE_DIV: case ARC_NODE_MOD: {
-        ArcValue lhs, rhs;
-        eval_binary_lhs_rhs(ip, node_id, &lhs, &rhs);
-        if (lhs.tag == VAL_I64 && rhs.tag == VAL_I64) {
-            switch (n->kind) {
-            case ARC_NODE_ADD: return arc_val_i64(lhs.as.i64 + rhs.as.i64);
-            case ARC_NODE_SUB: return arc_val_i64(lhs.as.i64 - rhs.as.i64);
-            case ARC_NODE_MUL: return arc_val_i64(lhs.as.i64 * rhs.as.i64);
-            case ARC_NODE_DIV:
-                if (rhs.as.i64 == 0) { ierr(ip, "division by zero"); return arc_val_null(); }
-                return arc_val_i64(lhs.as.i64 / rhs.as.i64);
-            case ARC_NODE_MOD:
-                if (rhs.as.i64 == 0) { ierr(ip, "modulo by zero"); return arc_val_null(); }
-                return arc_val_i64(lhs.as.i64 % rhs.as.i64);
-            default: break;
-            }
-        } else if (lhs.tag == VAL_F64 && rhs.tag == VAL_F64) {
-            switch (n->kind) {
-            case ARC_NODE_ADD: return arc_val_f64(lhs.as.f64 + rhs.as.f64);
-            case ARC_NODE_SUB: return arc_val_f64(lhs.as.f64 - rhs.as.f64);
-            case ARC_NODE_MUL: return arc_val_f64(lhs.as.f64 * rhs.as.f64);
-            case ARC_NODE_DIV: return arc_val_f64(lhs.as.f64 / rhs.as.f64);
-            default: break;
-            }
-        }
-        ierr(ip, "type mismatch in arithmetic"); return arc_val_null();
-    }
+    case ARC_NODE_DIV: case ARC_NODE_MOD:
+        return eval_arith(ip, node_id, n);
 
     case ARC_NODE_EQ: case ARC_NODE_NEQ:
     case ARC_NODE_LT: case ARC_NODE_LE:
-    case ARC_NODE_GT: case ARC_NODE_GE: {
-        ArcValue lhs, rhs;
-        eval_binary_lhs_rhs(ip, node_id, &lhs, &rhs);
-        if (n->kind == ARC_NODE_EQ)  return arc_val_bool(arc_val_equal(lhs, rhs));
-        if (n->kind == ARC_NODE_NEQ) return arc_val_bool(!arc_val_equal(lhs, rhs));
-        if (lhs.tag == VAL_I64 && rhs.tag == VAL_I64) {
-            switch (n->kind) {
-            case ARC_NODE_LT: return arc_val_bool(lhs.as.i64 < rhs.as.i64);
-            case ARC_NODE_LE: return arc_val_bool(lhs.as.i64 <= rhs.as.i64);
-            case ARC_NODE_GT: return arc_val_bool(lhs.as.i64 > rhs.as.i64);
-            case ARC_NODE_GE: return arc_val_bool(lhs.as.i64 >= rhs.as.i64);
-            default: break;
-            }
-        } else if (lhs.tag == VAL_F64 && rhs.tag == VAL_F64) {
-            switch (n->kind) {
-            case ARC_NODE_LT: return arc_val_bool(lhs.as.f64 < rhs.as.f64);
-            case ARC_NODE_LE: return arc_val_bool(lhs.as.f64 <= rhs.as.f64);
-            case ARC_NODE_GT: return arc_val_bool(lhs.as.f64 > rhs.as.f64);
-            case ARC_NODE_GE: return arc_val_bool(lhs.as.f64 >= rhs.as.f64);
-            default: break;
-            }
-        }
-        ierr(ip, "type mismatch in comparison"); return arc_val_null();
-    }
+    case ARC_NODE_GT: case ARC_NODE_GE:
+        return eval_comparison(ip, node_id, n);
 
     case ARC_NODE_NEG: {
         ArcValue v = eval_input(ip, node_id, "value");
@@ -192,73 +250,12 @@ static ArcValue eval_node(Interp* ip, ArcNodeId node_id) {
         if (v.tag == VAL_F64) return arc_val_f64(-v.as.f64);
         ierr(ip, "neg: type mismatch"); return arc_val_null();
     }
-
     case ARC_NODE_NOT: {
         ArcValue v = eval_input(ip, node_id, "value");
         return arc_val_bool(!arc_val_is_truthy(v));
     }
-
-    case ARC_NODE_FUNC_CALL: {
-        /* Find the function definition */
-        const char* fname = n->attr.name;
-        ArcNodeId func_def = ARC_INVALID_ID;
-        for (uint32_t i = 0; i < ip->graph->node_count; i++) {
-            if (ip->graph->nodes[i].kind == ARC_NODE_FUNC_DEF &&
-                strcmp(ip->graph->nodes[i].attr.func.name, fname) == 0) {
-                func_def = i; break;
-            }
-        }
-        if (func_def == ARC_INVALID_ID) {
-            ierr(ip, "undefined function '%s'", fname); return arc_val_null();
-        }
-
-        const ArcNode* fdef = &ip->graph->nodes[func_def];
-
-        /* Evaluate arguments */
-        ArcValue args[16]; uint8_t argc = 0;
-        if (n->cyclic_count > 0) {
-            for (uint32_t i = 0; i < n->cyclic_count && argc < 16; i++) {
-                const ArcPort* p = &ip->graph->ports[n->cyclic_order[i]];
-                if (p->dir == ARC_PORT_INPUT) {
-                    ArcNodeId src = find_source(ip->graph, p->id);
-                    args[argc++] = (src != ARC_INVALID_ID) ? eval_node(ip, src) : arc_val_null();
-                }
-            }
-        } else {
-            for (uint32_t i = 0; i < n->port_count && argc < 16; i++) {
-                const ArcPort* p = &ip->graph->ports[n->ports[i]];
-                if (p->dir == ARC_PORT_INPUT) {
-                    ArcNodeId src = find_source(ip->graph, p->id);
-                    args[argc++] = (src != ARC_INVALID_ID) ? eval_node(ip, src) : arc_val_null();
-                }
-            }
-        }
-
-        /* Push call frame */
-        if (ip->fp >= ARC_INTERP_FRAMES_MAX) { ierr(ip, "call stack overflow"); return arc_val_null(); }
-        ip->frames[ip->fp++] = (InterpFrame){ .base_var = ip->var_count };
-
-        /* Bind parameters */
-        ArcRegionId body_rid = fdef->attr.func.body_region;
-        const ArcRegion* body = &ip->graph->regions[body_rid];
-        uint8_t pi = 0;
-        for (uint32_t i = 0; i < body->member_count && pi < argc; i++) {
-            if (ip->graph->nodes[body->members[i]].kind == ARC_NODE_PARAM)
-                set_var(ip, ip->graph->nodes[body->members[i]].attr.name, args[pi++]);
-        }
-
-        /* Execute body */
-        ip->returned = false;
-        exec_region_stmts(ip, body_rid);
-
-        ArcValue ret = ip->result;
-        ip->returned = false;
-
-        /* Pop frame */
-        ip->fp--;
-        ip->var_count = ip->frames[ip->fp].base_var;
-        return ret;
-    }
+    case ARC_NODE_FUNC_CALL:
+        return eval_func_call(ip, node_id, n);
 
     case ARC_NODE_ROOT_OUTPUT:
         return eval_input(ip, node_id, "value");
@@ -285,6 +282,58 @@ static bool is_interp_expr(ArcNodeKind k) {
     }
 }
 
+/* --- Execute a single statement node in a region --- */
+static void exec_stmt(Interp* ip, ArcNodeId mid, const ArcNode* m) {
+    switch (m->kind) {
+    case ARC_NODE_LET: {
+        ArcValue val = eval_input(ip, mid, "value");
+        set_var(ip, m->attr.name, val);
+        break;
+    }
+    case ARC_NODE_ASSIGN: {
+        ArcValue val = eval_input(ip, mid, "value");
+        int idx = find_var(ip, m->attr.name);
+        if (idx < 0) { ierr(ip, "undefined variable '%s'", m->attr.name); return; }
+        ip->vars[idx].value = val;
+        break;
+    }
+    case ARC_NODE_PRINT: {
+        ArcValue val = eval_input(ip, mid, "value");
+        FILE* out = ip->output ? ip->output : stdout;
+        arc_val_print(val, out);
+        fprintf(out, "\n");
+        break;
+    }
+    case ARC_NODE_RETURN:
+        ip->result = eval_input(ip, mid, "value");
+        ip->returned = true;
+        return;
+    case ARC_NODE_IF: {
+        ArcValue cond = eval_input(ip, mid, "cond");
+        if (arc_val_is_truthy(cond))
+            exec_region_stmts(ip, m->attr.branch.then_region);
+        else
+            exec_region_stmts(ip, m->attr.branch.else_region);
+        break;
+    }
+    case ARC_NODE_WHILE: {
+        int max_iter = 100000;
+        while (max_iter-- > 0 && !ip->had_error && !ip->returned) {
+            ArcValue cond = eval_input(ip, mid, "cond");
+            if (!arc_val_is_truthy(cond)) break;
+            exec_region_stmts(ip, m->attr.loop.body_region);
+        }
+        if (max_iter <= 0) ierr(ip, "loop iteration limit exceeded");
+        break;
+    }
+    case ARC_NODE_ROOT_OUTPUT:
+        ip->result = eval_input(ip, mid, "value");
+        break;
+    default:
+        break;
+    }
+}
+
 static void exec_region_stmts(Interp* ip, ArcRegionId rid) {
     if (rid == ARC_INVALID_ID || ip->had_error) return;
     const ArcRegion* r = &ip->graph->regions[rid];
@@ -292,60 +341,8 @@ static void exec_region_stmts(Interp* ip, ArcRegionId rid) {
     for (uint32_t i = 0; i < r->member_count && !ip->had_error && !ip->returned; i++) {
         ArcNodeId mid = r->members[i];
         const ArcNode* m = &ip->graph->nodes[mid];
-
         if (m->kind == ARC_NODE_PARAM || is_interp_expr(m->kind)) continue;
-
-        switch (m->kind) {
-        case ARC_NODE_LET: {
-            ArcValue val = eval_input(ip, mid, "value");
-            set_var(ip, m->attr.name, val);
-            break;
-        }
-        case ARC_NODE_ASSIGN: {
-            ArcValue val = eval_input(ip, mid, "value");
-            int idx = find_var(ip, m->attr.name);
-            if (idx < 0) { ierr(ip, "undefined variable '%s'", m->attr.name); return; }
-            ip->vars[idx].value = val;
-            break;
-        }
-        case ARC_NODE_PRINT: {
-            ArcValue val = eval_input(ip, mid, "value");
-            FILE* out = ip->output ? ip->output : stdout;
-            arc_val_print(val, out);
-            fprintf(out, "\n");
-            break;
-        }
-        case ARC_NODE_RETURN: {
-            ip->result = eval_input(ip, mid, "value");
-            ip->returned = true;
-            return;
-        }
-        case ARC_NODE_IF: {
-            ArcValue cond = eval_input(ip, mid, "cond");
-            if (arc_val_is_truthy(cond))
-                exec_region_stmts(ip, m->attr.branch.then_region);
-            else
-                exec_region_stmts(ip, m->attr.branch.else_region);
-            break;
-        }
-        case ARC_NODE_WHILE: {
-            int max_iter = 100000;
-            while (max_iter-- > 0 && !ip->had_error && !ip->returned) {
-                /* Re-evaluate condition — follow cond port edge */
-                ArcValue cond = eval_input(ip, mid, "cond");
-                if (!arc_val_is_truthy(cond)) break;
-                exec_region_stmts(ip, m->attr.loop.body_region);
-            }
-            if (max_iter <= 0) ierr(ip, "loop iteration limit exceeded");
-            break;
-        }
-        case ARC_NODE_ROOT_OUTPUT: {
-            ip->result = eval_input(ip, mid, "value");
-            break;
-        }
-        default:
-            break;
-        }
+        exec_stmt(ip, mid, m);
     }
 }
 
@@ -358,11 +355,8 @@ ArcInterpResult arc_interpret(const ArcGraph* graph) {
     ip.graph = graph;
     ip.output = result.output;
 
-    /* Execute root region statements */
     const ArcRegion* root = &graph->regions[graph->root_region];
 
-    /* Process function definitions first (they're registered by name for calls) */
-    /* Process non-function, non-expression, non-output nodes */
     for (uint32_t i = 0; i < root->member_count && !ip.had_error; i++) {
         ArcNodeId mid = root->members[i];
         const ArcNode* m = &graph->nodes[mid];
@@ -394,10 +388,8 @@ ArcInterpResult arc_interpret(const ArcGraph* graph) {
         }
     }
 
-    /* Evaluate output node */
-    if (graph->output_node != ARC_INVALID_ID && !ip.had_error) {
+    if (graph->output_node != ARC_INVALID_ID && !ip.had_error)
         ip.result = eval_node(&ip, graph->output_node);
-    }
 
     result.result = ip.result;
     if (ip.had_error) {

@@ -21,7 +21,6 @@ static void hir_block_init(HirBlock* b) {
 }
 
 /* Forward declarations for recursive freeing */
-static void hir_expr_free(HirExpr* e);
 static void hir_block_free(HirBlock* b);
 
 static bool hir_expr_is_binary(HirExprKind k) {
@@ -43,7 +42,7 @@ static bool hir_expr_is_unary(HirExprKind k) {
 /*  Recursive freeing                                                   */
 /* ------------------------------------------------------------------ */
 
-static void hir_expr_free(HirExpr* e) {
+void hir_expr_free(HirExpr* e) {
     if (!e) return;
 
     if (hir_expr_is_binary(e->kind)) {
@@ -62,7 +61,7 @@ static void hir_expr_free(HirExpr* e) {
         }
         ARC_FREE(e->as.intrinsic.args);
     }
-    /* CONST_INT, CONST_FLOAT, CONST_BOOL, CONST_NULL, VAR_LOAD: no children */
+    /* CONST_INT, CONST_FLOAT, CONST_BOOL, CONST_NULL, VAR_LOAD, POISON: no children */
 
     ARC_FREE(e);
 }
@@ -184,71 +183,59 @@ static const char* hir_expr_kind_name(HirExprKind k) {
         case HIR_VAR_LOAD:   return "var";
         case HIR_CALL:       return "call";
         case HIR_INTRINSIC:  return "intrinsic";
+        case HIR_POISON:     return "poison";
         default:             return "?unknown?";
     }
 }
 
-void hir_dump_expr(const HirExpr* e, FILE* out, int indent) {
-    if (!e) {
-        fprintf(out, "(null)");
-        return;
-    }
-
+/* --- Dump a literal, var_load, or poison leaf expression --- */
+static void hir_dump_leaf(const HirExpr* e, FILE* out) {
     switch (e->kind) {
-        case HIR_CONST_INT:
-            fprintf(out, "(const_int %" PRId64 ")", e->as.int_val);
-            break;
-        case HIR_CONST_FLOAT:
-            fprintf(out, "(const_float %g)", e->as.float_val);
-            break;
-        case HIR_CONST_BOOL:
-            fprintf(out, "(const_bool %s)", e->as.bool_val ? "true" : "false");
-            break;
-        case HIR_CONST_NULL:
-            fprintf(out, "(const_null)");
-            break;
+        case HIR_CONST_INT:   fprintf(out, "(const_int %" PRId64 ")", e->as.int_val); break;
+        case HIR_CONST_FLOAT: fprintf(out, "(const_float %g)", e->as.float_val); break;
+        case HIR_CONST_BOOL:  fprintf(out, "(const_bool %s)", e->as.bool_val ? "true" : "false"); break;
+        case HIR_CONST_NULL:  fprintf(out, "(const_null)"); break;
+        case HIR_VAR_LOAD:    fprintf(out, "v%u", (unsigned)e->as.var_idx); break;
+        case HIR_POISON:      fprintf(out, "<poison>"); break;
+        default:              fprintf(out, "(?%s?)", hir_expr_kind_name(e->kind)); break;
+    }
+}
 
-        case HIR_VAR_LOAD:
-            fprintf(out, "v%u", (unsigned)e->as.var_idx);
-            break;
-
-        case HIR_ADD: case HIR_SUB: case HIR_MUL: case HIR_DIV: case HIR_MOD:
-        case HIR_EQ:  case HIR_NEQ: case HIR_LT:  case HIR_LE:
-        case HIR_GT:  case HIR_GE:
-            fprintf(out, "(%s ", hir_expr_kind_name(e->kind));
-            hir_dump_expr(e->as.binary.lhs, out, indent);
+/* --- Dump a call or intrinsic expression with arguments --- */
+static void hir_dump_call(const HirExpr* e, FILE* out, int indent) {
+    if (e->kind == HIR_CALL) {
+        fprintf(out, "(call f%u", (unsigned)e->as.call.func_idx);
+        for (uint8_t i = 0; i < e->as.call.argc; i++) {
             fputc(' ', out);
-            hir_dump_expr(e->as.binary.rhs, out, indent);
-            fputc(')', out);
-            break;
+            hir_dump_expr(e->as.call.args[i], out, indent);
+        }
+    } else {
+        fprintf(out, "(intrinsic #%u", (unsigned)e->as.intrinsic.intrinsic_id);
+        for (uint8_t i = 0; i < e->as.intrinsic.argc; i++) {
+            fputc(' ', out);
+            hir_dump_expr(e->as.intrinsic.args[i], out, indent);
+        }
+    }
+    fputc(')', out);
+}
 
-        case HIR_NEG: case HIR_NOT:
-            fprintf(out, "(%s ", hir_expr_kind_name(e->kind));
-            hir_dump_expr(e->as.unary.operand, out, indent);
-            fputc(')', out);
-            break;
+void hir_dump_expr(const HirExpr* e, FILE* out, int indent) {
+    if (!e) { fprintf(out, "(null)"); return; }
 
-        case HIR_CALL:
-            fprintf(out, "(call f%u", (unsigned)e->as.call.func_idx);
-            for (uint8_t i = 0; i < e->as.call.argc; i++) {
-                fputc(' ', out);
-                hir_dump_expr(e->as.call.args[i], out, indent);
-            }
-            fputc(')', out);
-            break;
-
-        case HIR_INTRINSIC:
-            fprintf(out, "(intrinsic #%u", (unsigned)e->as.intrinsic.intrinsic_id);
-            for (uint8_t i = 0; i < e->as.intrinsic.argc; i++) {
-                fputc(' ', out);
-                hir_dump_expr(e->as.intrinsic.args[i], out, indent);
-            }
-            fputc(')', out);
-            break;
-
-        default:
-            fprintf(out, "(?%s?)", hir_expr_kind_name(e->kind));
-            break;
+    if (hir_expr_is_binary(e->kind)) {
+        fprintf(out, "(%s ", hir_expr_kind_name(e->kind));
+        hir_dump_expr(e->as.binary.lhs, out, indent);
+        fputc(' ', out);
+        hir_dump_expr(e->as.binary.rhs, out, indent);
+        fputc(')', out);
+    } else if (hir_expr_is_unary(e->kind)) {
+        fprintf(out, "(%s ", hir_expr_kind_name(e->kind));
+        hir_dump_expr(e->as.unary.operand, out, indent);
+        fputc(')', out);
+    } else if (e->kind == HIR_CALL || e->kind == HIR_INTRINSIC) {
+        hir_dump_call(e, out, indent);
+    } else {
+        hir_dump_leaf(e, out);
     }
 }
 
@@ -409,7 +396,7 @@ static void hir_validate_expr(const HirExpr* e, const HirModule* m,
                               func_idx, v);
         }
     }
-    /* CONST_INT, CONST_FLOAT, CONST_BOOL, CONST_NULL: always valid */
+    /* CONST_INT, CONST_FLOAT, CONST_BOOL, CONST_NULL, POISON: always valid */
 }
 
 static void hir_validate_block(const HirBlock* b, const HirModule* m,
