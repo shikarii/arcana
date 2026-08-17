@@ -1,0 +1,74 @@
+; Level 1.07: Primality test
+; def is_prime(n): if n<2 return 0; i=2; while i*i<=n { if n%i==0 return 0; i++ }; return 1
+; is_prime(97) = 1 (97 is prime)
+; Expected result: i64(1)
+region r0 module
+region rb function parent=r0
+region rt1 then parent=rb
+region rl cycle parent=rb
+region rt2 then parent=rl
+node fdef func_def(is_prime) in r0 body_region=rb arity=1
+node p0 param(n) in rb
+; if n < 2 return 0
+node nr1 var_ref(n) in rb
+node c2a const_int(2) in rb
+node clt lt in rb
+edge e0 nr1.out -> clt.lhs
+edge e1 c2a.out -> clt.rhs
+node nif1 if in rb then_region=rt1
+edge e2 clt.out -> nif1.cond
+node c0a const_int(0) in rt1
+node ret0 return in rt1
+edge e3 c0a.out -> ret0.value
+; let i = 2
+node c2b const_int(2) in rb
+node li let(i) in rb
+edge e4 c2b.out -> li.value
+; while i*i <= n
+node cyc cycle in rb body_region=rl
+; break if not(i*i <= n)
+node ir1 var_ref(i) in rl
+node ir2 var_ref(i) in rl
+node sq mul in rl
+edge e5 ir1.out -> sq.lhs
+edge e6 ir2.out -> sq.rhs
+node nr2 var_ref(n) in rl
+node cle le in rl
+edge e7 sq.out -> cle.lhs
+edge e8 nr2.out -> cle.rhs
+node inv not in rl
+edge e9 cle.out -> inv.value
+node brk break_if in rl
+edge e10 inv.out -> brk.cond
+; if n%i == 0 return 0
+node nr3 var_ref(n) in rl
+node ir3 var_ref(i) in rl
+node md mod in rl
+edge e11 nr3.out -> md.lhs
+edge e12 ir3.out -> md.rhs
+node c0b const_int(0) in rl
+node ceq eq in rl
+edge e13 md.out -> ceq.lhs
+edge e14 c0b.out -> ceq.rhs
+node nif2 if in rl then_region=rt2
+edge e15 ceq.out -> nif2.cond
+node c0c const_int(0) in rt2
+node ret1 return in rt2
+edge e16 c0c.out -> ret1.value
+; i = i + 1
+node ir4 var_ref(i) in rl
+node c1 const_int(1) in rl
+node inc add in rl
+edge e17 ir4.out -> inc.lhs
+edge e18 c1.out -> inc.rhs
+node ai assign(i) in rl
+edge e19 inc.out -> ai.value
+; return 1
+node c1b const_int(1) in rb
+node ret2 return in rb
+edge e20 c1b.out -> ret2.value
+; Call is_prime(97)
+node c97 const_int(97) in r0
+node call0 func_call(is_prime) in r0
+edge e21 c97.out -> call0.arg0
+root call0.out

@@ -1,0 +1,41 @@
+; Level 1.01: Recursive factorial
+; def fact(n): if n <= 1 return 1; return n * fact(n-1)
+; result = fact(10) = 3628800
+; Expected result: i64(3628800)
+region r0 module
+region rb function parent=r0
+region rt then parent=rb
+region re else parent=rb
+node fdef func_def(fact) in r0 body_region=rb arity=1
+node p0 param(n) in rb
+; if n <= 1
+node nr1 var_ref(n) in rb
+node c1a const_int(1) in rb
+node cmp le in rb
+edge e0 nr1.out -> cmp.lhs
+edge e1 c1a.out -> cmp.rhs
+node nif if in rb then_region=rt else_region=re
+edge e2 cmp.out -> nif.cond
+; then: return 1
+node c1b const_int(1) in rt
+node ret1 return in rt
+edge e3 c1b.out -> ret1.value
+; else: return n * fact(n-1)
+node nr2 var_ref(n) in re
+node c1c const_int(1) in re
+node s0 sub in re
+edge e4 nr2.out -> s0.lhs
+edge e5 c1c.out -> s0.rhs
+node call func_call(fact) in re
+edge e6 s0.out -> call.arg0
+node nr3 var_ref(n) in re
+node m0 mul in re
+edge e7 nr3.out -> m0.lhs
+edge e8 call.out -> m0.rhs
+node ret2 return in re
+edge e9 m0.out -> ret2.value
+; Call fact(10)
+node c10 const_int(10) in r0
+node call0 func_call(fact) in r0
+edge e10 c10.out -> call0.arg0
+root call0.out

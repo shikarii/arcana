@@ -54,6 +54,17 @@ ArcCompileResult arc_compile(const ArcGraph* graph) {
     c.graph = graph;
     arc_image_init(&c.image);
     arc_buf_init(&c.code);
+    /* Pre-register all top-level functions so mutual recursion resolves */
+    for (uint32_t i = 0; i < graph->node_count; i++) {
+        if (graph->nodes[i].kind == ARC_NODE_FUNC_DEF && !is_closure_target(graph, i)) {
+            const ArcNode* fn = &graph->nodes[i];
+            uint16_t nci = arc_const_pool_add_string(&c.image.constants,
+                fn->attr.func.name, (uint32_t)strlen(fn->attr.func.name));
+            arc_func_table_add(&c.image.functions,
+                (ArcFuncRecord){ .name_const_idx = nci, .arity = fn->attr.func.arity });
+        }
+    }
+    /* Compile all function bodies (calls can now resolve any function) */
     for (uint32_t i = 0; i < graph->node_count; i++) {
         if (graph->nodes[i].kind == ARC_NODE_FUNC_DEF && !is_closure_target(graph, i))
             compile_function(&c, i);

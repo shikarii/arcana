@@ -1,0 +1,55 @@
+; Level 1.04: Count multiples of 3 in [1..15]
+; Multiples: 3,6,9,12,15 → 5
+; Tests: loop + modulo + branch + counter
+; Expected result: i64(5)
+region r0 module
+region rl cycle parent=r0
+region rt then parent=rl
+; let count = 0, i = 1
+node c0 const_int(0) in r0
+node lc let(count) in r0
+edge e0 c0.out -> lc.value
+node c1 const_int(1) in r0
+node li let(i) in r0
+edge e1 c1.out -> li.value
+; cycle
+node cyc cycle in r0 body_region=rl
+; break if i > 15
+node ir1 var_ref(i) in rl
+node c15 const_int(15) in rl
+node cgt gt in rl
+edge e2 ir1.out -> cgt.lhs
+edge e3 c15.out -> cgt.rhs
+node brk break_if in rl
+edge e4 cgt.out -> brk.cond
+; if i%3 == 0 then count++
+node ir2 var_ref(i) in rl
+node c3 const_int(3) in rl
+node m3 mod in rl
+edge e5 ir2.out -> m3.lhs
+edge e6 c3.out -> m3.rhs
+node c0a const_int(0) in rl
+node eq3 eq in rl
+edge e7 m3.out -> eq3.lhs
+edge e8 c0a.out -> eq3.rhs
+node nif if in rl then_region=rt
+edge e9 eq3.out -> nif.cond
+; then: count = count + 1
+node cr1 var_ref(count) in rt
+node c1a const_int(1) in rt
+node inc add in rt
+edge e10 cr1.out -> inc.lhs
+edge e11 c1a.out -> inc.rhs
+node ac assign(count) in rt
+edge e12 inc.out -> ac.value
+; i = i + 1
+node ir3 var_ref(i) in rl
+node c1b const_int(1) in rl
+node inc2 add in rl
+edge e13 ir3.out -> inc2.lhs
+edge e14 c1b.out -> inc2.rhs
+node ai assign(i) in rl
+edge e15 inc2.out -> ai.value
+; result
+node cref var_ref(count) in r0
+root cref.out

@@ -1,0 +1,53 @@
+; Level 1.03: Iterative power
+; def pow(base, exp): let r=1; while exp>0 { r=r*base; exp=exp-1 }; return r
+; result = pow(2, 10) = 1024
+; Expected result: i64(1024)
+region r0 module
+region rb function parent=r0
+region rl cycle parent=rb
+node fdef func_def(pow) in r0 body_region=rb arity=2
+node pa param(base) in rb
+node pb param(exp) in rb
+; let r = 1
+node c1 const_int(1) in rb
+node lr let(r) in rb
+edge e0 c1.out -> lr.value
+; cycle
+node cyc cycle in rb body_region=rl
+; break if exp <= 0 (i.e., not(exp > 0))
+node er1 var_ref(exp) in rl
+node c0 const_int(0) in rl
+node cgt gt in rl
+edge e1 er1.out -> cgt.lhs
+edge e2 c0.out -> cgt.rhs
+node inv not in rl
+edge e3 cgt.out -> inv.value
+node brk break_if in rl
+edge e4 inv.out -> brk.cond
+; r = r * base
+node rr1 var_ref(r) in rl
+node br1 var_ref(base) in rl
+node m0 mul in rl
+edge e5 rr1.out -> m0.lhs
+edge e6 br1.out -> m0.rhs
+node sr assign(r) in rl
+edge e7 m0.out -> sr.value
+; exp = exp - 1
+node er2 var_ref(exp) in rl
+node c1b const_int(1) in rl
+node s0 sub in rl
+edge e8 er2.out -> s0.lhs
+edge e9 c1b.out -> s0.rhs
+node se assign(exp) in rl
+edge e10 s0.out -> se.value
+; return r
+node rr2 var_ref(r) in rb
+node ret return in rb
+edge e11 rr2.out -> ret.value
+; Call pow(2, 10)
+node c2 const_int(2) in r0
+node c10 const_int(10) in r0
+node call0 func_call(pow) in r0
+edge e12 c2.out -> call0.arg0
+edge e13 c10.out -> call0.arg1
+root call0.out

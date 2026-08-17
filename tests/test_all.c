@@ -474,6 +474,28 @@ static void run_service_tests(void) {
     RUN(test_service_error_empty_on_success);
 }
 
+/* --- test_challenge_L1.c --- */
+extern void test_L1_01_factorial(void);
+extern void test_L1_02_gcd(void);
+extern void test_L1_03_power(void);
+extern void test_L1_04_fizzbuzz(void);
+extern void test_L1_05_sum_squares(void);
+extern void test_L1_06_collatz(void);
+extern void test_L1_07_is_prime(void);
+extern void test_L1_08_mutual_recursion(void);
+
+static void run_challenge_L1_tests(void) {
+    printf("\n[Challenge Corpus Level 1: Classic Algorithms]\n");
+    RUN(test_L1_01_factorial);
+    RUN(test_L1_02_gcd);
+    RUN(test_L1_03_power);
+    RUN(test_L1_04_fizzbuzz);
+    RUN(test_L1_05_sum_squares);
+    RUN(test_L1_06_collatz);
+    RUN(test_L1_07_is_prime);
+    RUN(test_L1_08_mutual_recursion);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -494,6 +516,7 @@ int main(void) {
     run_closure_tests();
     run_challenge_L0_tests();
     run_service_tests();
+    run_challenge_L1_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

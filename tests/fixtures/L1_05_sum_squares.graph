@@ -1,0 +1,45 @@
+; Level 1.05: Sum of squares
+; sum = 1^2 + 2^2 + ... + 10^2 = 385
+; Expected result: i64(385)
+region r0 module
+region rl cycle parent=r0
+; let sum = 0, i = 1
+node c0 const_int(0) in r0
+node ls let(sum) in r0
+edge e0 c0.out -> ls.value
+node c1 const_int(1) in r0
+node li let(i) in r0
+edge e1 c1.out -> li.value
+; cycle
+node cyc cycle in r0 body_region=rl
+; break if i > 10
+node ir1 var_ref(i) in rl
+node c10 const_int(10) in rl
+node cgt gt in rl
+edge e2 ir1.out -> cgt.lhs
+edge e3 c10.out -> cgt.rhs
+node brk break_if in rl
+edge e4 cgt.out -> brk.cond
+; sum = sum + i * i
+node ir2 var_ref(i) in rl
+node ir3 var_ref(i) in rl
+node sq mul in rl
+edge e5 ir2.out -> sq.lhs
+edge e6 ir3.out -> sq.rhs
+node sr var_ref(sum) in rl
+node add0 add in rl
+edge e7 sr.out -> add0.lhs
+edge e8 sq.out -> add0.rhs
+node as assign(sum) in rl
+edge e9 add0.out -> as.value
+; i = i + 1
+node ir4 var_ref(i) in rl
+node c1b const_int(1) in rl
+node inc add in rl
+edge e10 ir4.out -> inc.lhs
+edge e11 c1b.out -> inc.rhs
+node ai assign(i) in rl
+edge e12 inc.out -> ai.value
+; result
+node sref var_ref(sum) in r0
+root sref.out

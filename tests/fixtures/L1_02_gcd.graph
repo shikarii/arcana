@@ -1,0 +1,47 @@
+; Level 1.02: Euclidean GCD
+; def gcd(a, b): while b != 0 { t=b; b=a%b; a=t }; return a
+; result = gcd(48, 18) = 6
+; Expected result: i64(6)
+region r0 module
+region rb function parent=r0
+region rl cycle parent=rb
+node fdef func_def(gcd) in r0 body_region=rb arity=2
+node pa param(a) in rb
+node pb param(b) in rb
+; while loop via cycle
+node cyc cycle in rb body_region=rl
+; break if b == 0
+node br1 var_ref(b) in rl
+node c0 const_int(0) in rl
+node ceq eq in rl
+edge e0 br1.out -> ceq.lhs
+edge e1 c0.out -> ceq.rhs
+node brk break_if in rl
+edge e2 ceq.out -> brk.cond
+; t = b
+node br2 var_ref(b) in rl
+node lt let(t) in rl
+edge e3 br2.out -> lt.value
+; b = a % b
+node ar1 var_ref(a) in rl
+node br3 var_ref(b) in rl
+node md mod in rl
+edge e4 ar1.out -> md.lhs
+edge e5 br3.out -> md.rhs
+node sb assign(b) in rl
+edge e6 md.out -> sb.value
+; a = t
+node tr1 var_ref(t) in rl
+node sa assign(a) in rl
+edge e7 tr1.out -> sa.value
+; return a
+node ar2 var_ref(a) in rb
+node ret return in rb
+edge e8 ar2.out -> ret.value
+; Call gcd(48, 18)
+node c48 const_int(48) in r0
+node c18 const_int(18) in r0
+node call0 func_call(gcd) in r0
+edge e9 c48.out -> call0.arg0
+edge e10 c18.out -> call0.arg1
+root call0.out
