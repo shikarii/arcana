@@ -18,98 +18,80 @@ else()
         -Wshadow                 # warn on shadowed variables
         -Wstrict-prototypes      # require full prototypes
         -Wold-style-definition   # reject K&R-style function defs
-        -Wmissing-prototypes     # warn on missing forward declarations
         -Wdouble-promotion      # warn on float→double implicit promotion
-        -Wformat=2               # stricter printf format checking
+        -Wformat                 # printf format checking (not =2; -Wformat-nonliteral false-positives on variadic wrappers)
         -Wnull-dereference       # warn on null pointer deref paths
         -Wno-unused-parameter    # allow unused params (common in callbacks)
     )
 endif()
 
-# --- Library: arcana_common ---
-add_library(arcana_common STATIC
-    src/common/arena.c
-)
+# Extra strictness for library code (not tests — test functions lack prototypes by design)
+set(ARCANA_LIB_STRICT "")
+if(NOT MSVC)
+    set(ARCANA_LIB_STRICT -Wmissing-prototypes)
+endif()
+
+# --- All library targets ---
+set(ARCANA_LIBS "")
+
+add_library(arcana_common STATIC src/common/arena.c)
 target_include_directories(arcana_common PUBLIC src)
+list(APPEND ARCANA_LIBS arcana_common)
 
-# --- Library: arcana_platform ---
-add_library(arcana_platform STATIC
-    src/platform/platform.c
-)
+add_library(arcana_platform STATIC src/platform/platform.c)
 target_include_directories(arcana_platform PUBLIC src)
+list(APPEND ARCANA_LIBS arcana_platform)
 
-# --- Library: arcana_bytecode ---
-add_library(arcana_bytecode STATIC
-    src/bytecode/format.c
-    src/bytecode/disassembler.c
-)
+add_library(arcana_bytecode STATIC src/bytecode/format.c src/bytecode/disassembler.c)
 target_include_directories(arcana_bytecode PUBLIC src)
+list(APPEND ARCANA_LIBS arcana_bytecode)
 
-# --- Library: arcana_runtime ---
-add_library(arcana_runtime STATIC
-    src/runtime/object.c
-    src/runtime/gc.c
-    src/vm/value_ops.c
-)
+add_library(arcana_runtime STATIC src/runtime/object.c src/runtime/gc.c src/vm/value_ops.c)
 target_include_directories(arcana_runtime PUBLIC src)
+list(APPEND ARCANA_LIBS arcana_runtime)
 
-# --- Library: arcana_vm ---
-add_library(arcana_vm STATIC
-    src/vm/vm.c
-    src/vm/vm_ops.c
-)
+add_library(arcana_vm STATIC src/vm/vm.c src/vm/vm_ops.c)
 target_link_libraries(arcana_vm PUBLIC arcana_bytecode arcana_runtime)
+list(APPEND ARCANA_LIBS arcana_vm)
 
-# --- Library: arcana_verifier ---
-add_library(arcana_verifier STATIC
-    src/verifier/verifier.c
-)
+add_library(arcana_verifier STATIC src/verifier/verifier.c)
 target_link_libraries(arcana_verifier PUBLIC arcana_bytecode)
+list(APPEND ARCANA_LIBS arcana_verifier)
 
-# --- Library: arcana_semantic_graph ---
 add_library(arcana_semantic_graph STATIC
-    src/semantic_graph/semantic_graph.c
-    src/semantic_graph/fixture_parser.c
-)
+    src/semantic_graph/semantic_graph.c src/semantic_graph/fixture_parser.c)
 target_include_directories(arcana_semantic_graph PUBLIC src)
+list(APPEND ARCANA_LIBS arcana_semantic_graph)
 
-# --- Library: arcana_hir ---
-add_library(arcana_hir STATIC
-    src/hir/hir.c
-)
+add_library(arcana_hir STATIC src/hir/hir.c)
 target_include_directories(arcana_hir PUBLIC src)
+list(APPEND ARCANA_LIBS arcana_hir)
 
-# --- Library: arcana_mir ---
-add_library(arcana_mir STATIC
-    src/mir/mir.c
-)
+add_library(arcana_mir STATIC src/mir/mir.c)
 target_include_directories(arcana_mir PUBLIC src)
+list(APPEND ARCANA_LIBS arcana_mir)
 
-# --- Library: arcana_semantic ---
 add_library(arcana_semantic STATIC
-    src/semantic/scope.c
-    src/semantic/semantic.c
-    src/semantic/semantic_expr.c
-)
+    src/semantic/scope.c src/semantic/semantic.c src/semantic/semantic_expr.c)
 target_link_libraries(arcana_semantic PUBLIC arcana_semantic_graph arcana_hir)
+list(APPEND ARCANA_LIBS arcana_semantic)
 
-# --- Library: arcana_typecheck ---
-add_library(arcana_typecheck STATIC
-    src/typecheck/typecheck.c
-)
+add_library(arcana_typecheck STATIC src/typecheck/typecheck.c)
 target_link_libraries(arcana_typecheck PUBLIC arcana_semantic_graph)
+list(APPEND ARCANA_LIBS arcana_typecheck)
 
-# --- Library: arcana_compiler ---
-add_library(arcana_compiler STATIC
-    src/compiler/compiler.c
-)
+add_library(arcana_compiler STATIC src/compiler/compiler.c)
 target_link_libraries(arcana_compiler PUBLIC arcana_bytecode arcana_semantic_graph)
+list(APPEND ARCANA_LIBS arcana_compiler)
 
-# --- Library: arcana_interpreter ---
-add_library(arcana_interpreter STATIC
-    src/interpreter/interpreter.c
-)
+add_library(arcana_interpreter STATIC src/interpreter/interpreter.c)
 target_link_libraries(arcana_interpreter PUBLIC arcana_semantic_graph)
+list(APPEND ARCANA_LIBS arcana_interpreter)
+
+# Apply -Wmissing-prototypes to all library targets (not tests)
+foreach(lib ${ARCANA_LIBS})
+    target_compile_options(${lib} PRIVATE ${ARCANA_LIB_STRICT})
+endforeach()
 
 # --- Test executable ---
 add_executable(arcana_tests
