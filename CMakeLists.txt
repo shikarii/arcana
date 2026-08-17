@@ -157,5 +157,6 @@ enable_testing()
 add_test(NAME arcana_tests COMMAND arcana_tests)
 
 # --- LOC limit enforcement (600 lines/file, 60 lines/function) ---
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
 add_test(NAME check_limits
-    COMMAND py -3 "${CMAKE_SOURCE_DIR}/tools/check-limits.py" --root "${CMAKE_SOURCE_DIR}")
+    COMMAND "${Python3_EXECUTABLE}" "${CMAKE_SOURCE_DIR}/tools/check-limits.py" --root "${CMAKE_SOURCE_DIR}")
