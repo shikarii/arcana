@@ -6,43 +6,45 @@ static bool is_const_numeric(const ArcNode* n) {
     return n->kind == ARC_NODE_CONST_INT || n->kind == ARC_NODE_CONST_FLOAT;
 }
 
+/* Helper: add folded numeric constant to pool */
+static uint16_t fold_num(Compiler* c, bool f, double fv, int64_t iv) {
+    return f ? arc_const_pool_add_f64(&c->image.constants, fv)
+             : arc_const_pool_add_i64(&c->image.constants, iv);
+}
+
 static bool try_fold_binary(Compiler* c, ArcNodeId lhs_id, ArcNodeId rhs_id, ArcNodeKind op) {
     const ArcNode* l = &c->graph->nodes[lhs_id];
     const ArcNode* r = &c->graph->nodes[rhs_id];
     if (!is_const_numeric(l) || !is_const_numeric(r)) return false;
-    bool use_f64 = (l->kind == ARC_NODE_CONST_FLOAT || r->kind == ARC_NODE_CONST_FLOAT);
+    bool f = (l->kind == ARC_NODE_CONST_FLOAT || r->kind == ARC_NODE_CONST_FLOAT);
     double lf = l->kind == ARC_NODE_CONST_FLOAT ? l->attr.float_value : (double)l->attr.int_value;
     double rf = r->kind == ARC_NODE_CONST_FLOAT ? r->attr.float_value : (double)r->attr.int_value;
     int64_t li = l->kind == ARC_NODE_CONST_INT ? l->attr.int_value : (int64_t)l->attr.float_value;
     int64_t ri = r->kind == ARC_NODE_CONST_INT ? r->attr.int_value : (int64_t)r->attr.float_value;
-    uint16_t ci = 0; bool is_cmp = false; bool cmp_val = false;
+    uint16_t ci = 0;
     switch (op) {
-    case ARC_NODE_ADD: if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf+rf);
-                       else ci = arc_const_pool_add_i64(&c->image.constants, li+ri); break;
-    case ARC_NODE_SUB: if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf-rf);
-                       else ci = arc_const_pool_add_i64(&c->image.constants, li-ri); break;
-    case ARC_NODE_MUL: if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf*rf);
-                       else ci = arc_const_pool_add_i64(&c->image.constants, li*ri); break;
-    case ARC_NODE_DIV: if (ri == 0 && !use_f64) return false; /* skip div-by-zero */
-                       if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf/rf);
-                       else ci = arc_const_pool_add_i64(&c->image.constants, li/ri); break;
-    case ARC_NODE_MOD: if (ri == 0 && !use_f64) return false;
-                       if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, fmod(lf,rf));
-                       else ci = arc_const_pool_add_i64(&c->image.constants, li%ri); break;
-    case ARC_NODE_EQ:  is_cmp=true; cmp_val = use_f64 ? lf==rf : li==ri; break;
-    case ARC_NODE_NEQ: is_cmp=true; cmp_val = use_f64 ? lf!=rf : li!=ri; break;
-    case ARC_NODE_LT:  is_cmp=true; cmp_val = use_f64 ? lf<rf : li<ri; break;
-    case ARC_NODE_LE:  is_cmp=true; cmp_val = use_f64 ? lf<=rf : li<=ri; break;
-    case ARC_NODE_GT:  is_cmp=true; cmp_val = use_f64 ? lf>rf : li>ri; break;
-    case ARC_NODE_GE:  is_cmp=true; cmp_val = use_f64 ? lf>=rf : li>=ri; break;
-    case ARC_NODE_BIT_AND: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li&ri); break;
-    case ARC_NODE_BIT_OR:  if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li|ri); break;
-    case ARC_NODE_BIT_XOR: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li^ri); break;
-    case ARC_NODE_SHL: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li<<ri); break;
-    case ARC_NODE_SHR: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li>>ri); break;
+    case ARC_NODE_ADD: ci = fold_num(c, f, lf+rf, li+ri); break;
+    case ARC_NODE_SUB: ci = fold_num(c, f, lf-rf, li-ri); break;
+    case ARC_NODE_MUL: ci = fold_num(c, f, lf*rf, li*ri); break;
+    case ARC_NODE_DIV:
+        if (ri == 0 && !f) return false;
+        ci = fold_num(c, f, lf/rf, li/ri); break;
+    case ARC_NODE_MOD:
+        if (ri == 0 && !f) return false;
+        ci = fold_num(c, f, fmod(lf,rf), li%ri); break;
+    case ARC_NODE_EQ:  ci = arc_const_pool_add_bool(&c->image.constants, f ? lf==rf : li==ri); break;
+    case ARC_NODE_NEQ: ci = arc_const_pool_add_bool(&c->image.constants, f ? lf!=rf : li!=ri); break;
+    case ARC_NODE_LT:  ci = arc_const_pool_add_bool(&c->image.constants, f ? lf<rf  : li<ri);  break;
+    case ARC_NODE_LE:  ci = arc_const_pool_add_bool(&c->image.constants, f ? lf<=rf : li<=ri); break;
+    case ARC_NODE_GT:  ci = arc_const_pool_add_bool(&c->image.constants, f ? lf>rf  : li>ri);  break;
+    case ARC_NODE_GE:  ci = arc_const_pool_add_bool(&c->image.constants, f ? lf>=rf : li>=ri); break;
+    case ARC_NODE_BIT_AND: if (f) return false; ci = fold_num(c, false, 0, li&ri); break;
+    case ARC_NODE_BIT_OR:  if (f) return false; ci = fold_num(c, false, 0, li|ri); break;
+    case ARC_NODE_BIT_XOR: if (f) return false; ci = fold_num(c, false, 0, li^ri); break;
+    case ARC_NODE_SHL: if (f) return false; ci = fold_num(c, false, 0, li<<ri); break;
+    case ARC_NODE_SHR: if (f) return false; ci = fold_num(c, false, 0, li>>ri); break;
     default: return false;
     }
-    if (is_cmp) ci = arc_const_pool_add_bool(&c->image.constants, cmp_val);
     emit_const(c, ci);
     return true;
 }
