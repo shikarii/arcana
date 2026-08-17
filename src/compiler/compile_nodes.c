@@ -1,4 +1,76 @@
 #include "compiler_internal.h"
+#include <math.h>
+
+/* --- Constant folding --- */
+static bool is_const_numeric(const ArcNode* n) {
+    return n->kind == ARC_NODE_CONST_INT || n->kind == ARC_NODE_CONST_FLOAT;
+}
+
+static bool try_fold_binary(Compiler* c, ArcNodeId lhs_id, ArcNodeId rhs_id, ArcNodeKind op) {
+    const ArcNode* l = &c->graph->nodes[lhs_id];
+    const ArcNode* r = &c->graph->nodes[rhs_id];
+    if (!is_const_numeric(l) || !is_const_numeric(r)) return false;
+    bool use_f64 = (l->kind == ARC_NODE_CONST_FLOAT || r->kind == ARC_NODE_CONST_FLOAT);
+    double lf = l->kind == ARC_NODE_CONST_FLOAT ? l->attr.float_value : (double)l->attr.int_value;
+    double rf = r->kind == ARC_NODE_CONST_FLOAT ? r->attr.float_value : (double)r->attr.int_value;
+    int64_t li = l->kind == ARC_NODE_CONST_INT ? l->attr.int_value : (int64_t)l->attr.float_value;
+    int64_t ri = r->kind == ARC_NODE_CONST_INT ? r->attr.int_value : (int64_t)r->attr.float_value;
+    uint16_t ci = 0; bool is_cmp = false; bool cmp_val = false;
+    switch (op) {
+    case ARC_NODE_ADD: if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf+rf);
+                       else ci = arc_const_pool_add_i64(&c->image.constants, li+ri); break;
+    case ARC_NODE_SUB: if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf-rf);
+                       else ci = arc_const_pool_add_i64(&c->image.constants, li-ri); break;
+    case ARC_NODE_MUL: if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf*rf);
+                       else ci = arc_const_pool_add_i64(&c->image.constants, li*ri); break;
+    case ARC_NODE_DIV: if (ri == 0 && !use_f64) return false; /* skip div-by-zero */
+                       if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, lf/rf);
+                       else ci = arc_const_pool_add_i64(&c->image.constants, li/ri); break;
+    case ARC_NODE_MOD: if (ri == 0 && !use_f64) return false;
+                       if (use_f64) ci = arc_const_pool_add_f64(&c->image.constants, fmod(lf,rf));
+                       else ci = arc_const_pool_add_i64(&c->image.constants, li%ri); break;
+    case ARC_NODE_EQ:  is_cmp=true; cmp_val = use_f64 ? lf==rf : li==ri; break;
+    case ARC_NODE_NEQ: is_cmp=true; cmp_val = use_f64 ? lf!=rf : li!=ri; break;
+    case ARC_NODE_LT:  is_cmp=true; cmp_val = use_f64 ? lf<rf : li<ri; break;
+    case ARC_NODE_LE:  is_cmp=true; cmp_val = use_f64 ? lf<=rf : li<=ri; break;
+    case ARC_NODE_GT:  is_cmp=true; cmp_val = use_f64 ? lf>rf : li>ri; break;
+    case ARC_NODE_GE:  is_cmp=true; cmp_val = use_f64 ? lf>=rf : li>=ri; break;
+    case ARC_NODE_BIT_AND: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li&ri); break;
+    case ARC_NODE_BIT_OR:  if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li|ri); break;
+    case ARC_NODE_BIT_XOR: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li^ri); break;
+    case ARC_NODE_SHL: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li<<ri); break;
+    case ARC_NODE_SHR: if (use_f64) return false; ci = arc_const_pool_add_i64(&c->image.constants, li>>ri); break;
+    default: return false;
+    }
+    if (is_cmp) ci = arc_const_pool_add_bool(&c->image.constants, cmp_val);
+    emit_const(c, ci);
+    return true;
+}
+
+static bool try_fold_unary(Compiler* c, ArcNodeId src_id, ArcNodeKind op) {
+    const ArcNode* s = &c->graph->nodes[src_id];
+    if (!is_const_numeric(s) && s->kind != ARC_NODE_CONST_BOOL) return false;
+    uint16_t ci;
+    switch (op) {
+    case ARC_NODE_NEG:
+        if (s->kind == ARC_NODE_CONST_INT) ci = arc_const_pool_add_i64(&c->image.constants, -s->attr.int_value);
+        else if (s->kind == ARC_NODE_CONST_FLOAT) ci = arc_const_pool_add_f64(&c->image.constants, -s->attr.float_value);
+        else return false;
+        break;
+    case ARC_NODE_NOT:
+        if (s->kind == ARC_NODE_CONST_BOOL) ci = arc_const_pool_add_bool(&c->image.constants, !s->attr.bool_value);
+        else if (s->kind == ARC_NODE_CONST_INT) ci = arc_const_pool_add_bool(&c->image.constants, !s->attr.int_value);
+        else return false;
+        break;
+    case ARC_NODE_BIT_NOT:
+        if (s->kind != ARC_NODE_CONST_INT) return false;
+        ci = arc_const_pool_add_i64(&c->image.constants, ~s->attr.int_value);
+        break;
+    default: return false;
+    }
+    emit_const(c, ci);
+    return true;
+}
 
 /* --- Node-kind to opcode mapping --- */
 static int binary_op_for_kind(ArcNodeKind k) {
@@ -85,16 +157,19 @@ static void compile_binary(Compiler* c, ArcNodeId node_id, uint8_t op) {
     if (lhs_src == ARC_INVALID_ID || rhs_src == ARC_INVALID_ID) {
         cerr(c, "binary op node %u has disconnected inputs", node_id); return;
     }
+    if (try_fold_binary(c, lhs_src, rhs_src, n->kind)) return;
     compile_node(c, lhs_src);
     compile_node(c, rhs_src);
     emit_op(c, op);
 }
 
 static void compile_unary(Compiler* c, ArcNodeId node_id, uint8_t op) {
+    const ArcNode* n = &c->graph->nodes[node_id];
     ArcPortId in = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
     if (in == ARC_INVALID_ID) in = find_port_by_role(c->graph, node_id, "in", ARC_PORT_INPUT);
     ArcNodeId src = find_source_node(c->graph, in);
     if (src == ARC_INVALID_ID) { cerr(c, "unary node %u has no input", node_id); return; }
+    if (try_fold_unary(c, src, n->kind)) return;
     compile_node(c, src);
     emit_op(c, op);
 }
@@ -314,6 +389,26 @@ static void compile_func_call(Compiler* c, ArcNodeId node_id, const ArcNode* n) 
     track_stack(c, argc, 1);
 }
 
+/* --- Record operations --- */
+static void compile_record_op(Compiler* c, ArcNodeId node_id, const ArcNode* n) {
+    uint16_t ci = arc_const_pool_add_string(&c->image.constants,
+        n->attr.name, (uint32_t)strlen(n->attr.name));
+    if (n->kind == ARC_NODE_RECORD_NEW) {
+        emit_byte(c, OP_RECORD_NEW); emit_u16(c, ci); track_stack(c, 0, 1);
+    } else if (n->kind == ARC_NODE_FIELD_GET) {
+        compile_value_port(c, node_id);
+        emit_byte(c, OP_FIELD_GET); emit_u16(c, ci); track_stack(c, 1, 1);
+    } else { /* FIELD_SET */
+        ArcPortId rp = find_port_by_role(c->graph, node_id, "record", ARC_PORT_INPUT);
+        ArcNodeId rs = find_source_node(c->graph, rp);
+        if (rs != ARC_INVALID_ID) compile_node(c, rs);
+        ArcPortId vp = find_port_by_role(c->graph, node_id, "value", ARC_PORT_INPUT);
+        ArcNodeId vs = find_source_node(c->graph, vp);
+        if (vs != ARC_INVALID_ID) compile_node(c, vs);
+        emit_byte(c, OP_FIELD_SET); emit_u16(c, ci); track_stack(c, 2, 1);
+    }
+}
+
 /* --- Main compile_node: dispatch switch --- */
 void compile_node(Compiler* c, ArcNodeId node_id) {
     if (node_id >= c->graph->node_count) { cerr(c, "invalid node id %u", node_id); return; }
@@ -336,6 +431,8 @@ void compile_node(Compiler* c, ArcNodeId node_id) {
     case ARC_NODE_THROW: compile_unary(c, node_id, OP_THROW); break;
     case ARC_NODE_CLOSURE: compile_closure(c, node_id); break;
     case ARC_NODE_INTRINSIC_CALL: compile_intrinsic_call(c, n); break;
+    case ARC_NODE_RECORD_NEW: case ARC_NODE_FIELD_GET: case ARC_NODE_FIELD_SET:
+        compile_record_op(c, node_id, n); break;
     case ARC_NODE_VAR_REF: {
         int slot = find_local(c, n->attr.name);
         if (slot >= 0) { emit_op(c, OP_LOAD_LOCAL); emit_u16(c, (uint16_t)slot); }

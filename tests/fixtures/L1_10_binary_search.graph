@@ -1,0 +1,145 @@
+; Level 1.10: Binary search
+; Search for 7 in sorted array [1,3,5,7,9,11,13,15]
+; Expected result: i64(3)  (index of 7)
+region r0 module
+region fb function parent=r0
+region wbody loop_body parent=fb
+region ift then parent=wbody
+region ife else parent=wbody
+region ift2 then parent=ife
+region ife2 else parent=ife
+
+; def binary_search(arr, n, target):
+node fdef func_def(binary_search) in r0 body_region=fb arity=3
+node p_arr param(arr) in fb
+node p_n param(n) in fb
+node p_t param(target) in fb
+
+;   let lo = 0
+node c0 const_int(0) in fb
+node llo let(lo) in fb
+edge e01 c0.out -> llo.value
+
+;   let hi = n - 1
+node vrn var_ref(n) in fb
+node c1 const_int(1) in fb
+node sub1 sub in fb
+edge e02 vrn.out -> sub1.lhs
+edge e03 c1.out -> sub1.rhs
+node lhi let(hi) in fb
+edge e04 sub1.out -> lhi.value
+
+;   let result = -1
+node cm1 const_int(-1) in fb
+node lres let(result) in fb
+edge e05 cm1.out -> lres.value
+
+;   while lo <= hi:
+node vrlo var_ref(lo) in fb
+node vrhi var_ref(hi) in fb
+node cle le in fb
+edge e06 vrlo.out -> cle.lhs
+edge e07 vrhi.out -> cle.rhs
+node wh while in fb body_region=wbody
+edge e08 cle.out -> wh.cond
+
+;     let mid = (lo + hi) / 2
+node vrlo2 var_ref(lo) in wbody
+node vrhi2 var_ref(hi) in wbody
+node add1 add in wbody
+edge e09 vrlo2.out -> add1.lhs
+edge e10 vrhi2.out -> add1.rhs
+node c2 const_int(2) in wbody
+node div1 div in wbody
+edge e11 add1.out -> div1.lhs
+edge e12 c2.out -> div1.rhs
+node lmid let(mid) in wbody
+edge e13 div1.out -> lmid.value
+
+;     let midval = arr[mid]
+node vra var_ref(arr) in wbody
+node vrmid var_ref(mid) in wbody
+node ig index_get in wbody
+edge e14 vra.out -> ig.lhs
+edge e15 vrmid.out -> ig.rhs
+node lmv let(midval) in wbody
+edge e16 ig.out -> lmv.value
+
+;     if midval == target: result = mid; return result
+node vrmv var_ref(midval) in wbody
+node vrt var_ref(target) in wbody
+node ceq eq in wbody
+edge e17 vrmv.out -> ceq.lhs
+edge e18 vrt.out -> ceq.rhs
+node if1 if in wbody then_region=ift else_region=ife
+edge e19 ceq.out -> if1.cond
+
+;       result = mid
+node vrmid2 var_ref(mid) in ift
+node ares assign(result) in ift
+edge e20 vrmid2.out -> ares.value
+;       hi = -1 (force exit: lo > hi)
+node vrlo3 var_ref(lo) in ift
+node c1a const_int(1) in ift
+node sub2 sub in ift
+edge e21 vrlo3.out -> sub2.lhs
+edge e22 c1a.out -> sub2.rhs
+node ahi assign(hi) in ift
+edge e23 sub2.out -> ahi.value
+
+;     else if midval < target: lo = mid + 1
+node vrmv2 var_ref(midval) in ife
+node vrt2 var_ref(target) in ife
+node clt lt in ife
+edge e24 vrmv2.out -> clt.lhs
+edge e25 vrt2.out -> clt.rhs
+node if2 if in ife then_region=ift2 else_region=ife2
+edge e26 clt.out -> if2.cond
+
+node vrmid3 var_ref(mid) in ift2
+node c1b const_int(1) in ift2
+node add2 add in ift2
+edge e27 vrmid3.out -> add2.lhs
+edge e28 c1b.out -> add2.rhs
+node alo assign(lo) in ift2
+edge e29 add2.out -> alo.value
+
+;     else: hi = mid - 1
+node vrmid4 var_ref(mid) in ife2
+node c1c const_int(1) in ife2
+node sub3 sub in ife2
+edge e30 vrmid4.out -> sub3.lhs
+edge e31 c1c.out -> sub3.rhs
+node ahi2 assign(hi) in ife2
+edge e32 sub3.out -> ahi2.value
+
+;   return result
+node vrres var_ref(result) in fb
+node ret return in fb
+edge e33 vrres.out -> ret.value
+
+; main: search for 7 in [1,3,5,7,9,11,13,15]
+node a1 const_int(1) in r0
+node a3 const_int(3) in r0
+node a5 const_int(5) in r0
+node a7 const_int(7) in r0
+node a9 const_int(9) in r0
+node a11 const_int(11) in r0
+node a13 const_int(13) in r0
+node a15 const_int(15) in r0
+node arr array_literal in r0
+edge e34 a1.out -> arr.item0
+edge e35 a3.out -> arr.item1
+edge e36 a5.out -> arr.item2
+edge e37 a7.out -> arr.item3
+edge e38 a9.out -> arr.item4
+edge e39 a11.out -> arr.item5
+edge e40 a13.out -> arr.item6
+edge e41 a15.out -> arr.item7
+node c8 const_int(8) in r0
+node ct const_int(7) in r0
+node call func_call(binary_search) in r0
+edge e42 arr.out -> call.arg0
+edge e43 c8.out -> call.arg1
+edge e44 ct.out -> call.arg2
+root call.out

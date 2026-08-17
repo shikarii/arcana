@@ -119,6 +119,7 @@ add_executable(arcana_tests
     tests/test_challenge_L0.c
     tests/test_service.c
     tests/test_challenge_L1.c
+    tests/test_const_fold.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode

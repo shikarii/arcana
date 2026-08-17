@@ -128,6 +128,12 @@ extern void test_fixture_parse_add(void);
 extern void test_fixture_parse_file(void);
 extern void test_fixture_parse_malformed(void);
 
+/* --- test_const_fold.c --- */
+extern void test_fold_int_arithmetic(void);
+extern void test_fold_int_comparison(void);
+extern void test_fold_unary_neg(void);
+extern void test_fold_nested_expr(void);
+
 /* --- test_pipeline_e2e.c --- */
 extern void test_e2e_function_call(void);
 extern void test_e2e_if_else(void);
@@ -327,6 +333,12 @@ static void run_pipeline_tests(void) {
     RUN(test_fixture_parse_file);
     RUN(test_fixture_parse_malformed);
 
+    printf("\n[Constant Folding]\n");
+    RUN(test_fold_int_arithmetic);
+    RUN(test_fold_int_comparison);
+    RUN(test_fold_unary_neg);
+    RUN(test_fold_nested_expr);
+
     printf("\n[New Node Kinds]\n");
     RUN(test_compiler_new_node_kinds_exist);
 }
@@ -483,6 +495,14 @@ extern void test_L1_05_sum_squares(void);
 extern void test_L1_06_collatz(void);
 extern void test_L1_07_is_prime(void);
 extern void test_L1_08_mutual_recursion(void);
+extern void test_L1_09_bubble_sort(void);
+extern void test_L1_10_binary_search(void);
+extern void test_L1_11_selection_sort(void);
+extern void test_L1_12_max_subarray(void);
+extern void test_L1_13_insertion_sort(void);
+extern void test_L1_14_two_sum(void);
+extern void test_L1_15_record_point(void);
+extern void test_L1_16_linked_list(void);
 
 static void run_challenge_L1_tests(void) {
     printf("\n[Challenge Corpus Level 1: Classic Algorithms]\n");
@@ -494,6 +514,14 @@ static void run_challenge_L1_tests(void) {
     RUN(test_L1_06_collatz);
     RUN(test_L1_07_is_prime);
     RUN(test_L1_08_mutual_recursion);
+    RUN(test_L1_09_bubble_sort);
+    RUN(test_L1_10_binary_search);
+    RUN(test_L1_11_selection_sort);
+    RUN(test_L1_12_max_subarray);
+    RUN(test_L1_13_insertion_sort);
+    RUN(test_L1_14_two_sum);
+    RUN(test_L1_15_record_point);
+    RUN(test_L1_16_linked_list);
 }
 
 /* ================================================================

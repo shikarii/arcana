@@ -13,10 +13,14 @@ void arc_graph_free(ArcGraph* g) {
             ArcNodeKind k = g->nodes[i].kind;
             if (k == ARC_NODE_LET || k == ARC_NODE_VAR_REF ||
                 k == ARC_NODE_ASSIGN || k == ARC_NODE_PARAM ||
-                k == ARC_NODE_FUNC_CALL)
+                k == ARC_NODE_FUNC_CALL ||
+                k == ARC_NODE_RECORD_NEW || k == ARC_NODE_FIELD_GET ||
+                k == ARC_NODE_FIELD_SET)
                 ARC_FREE((void*)g->nodes[i].attr.name);
             else if (k == ARC_NODE_FUNC_DEF)
                 ARC_FREE((void*)g->nodes[i].attr.func.name);
+            else if (k == ARC_NODE_CONST_STRING)
+                ARC_FREE((void*)g->nodes[i].attr.string_value.data);
         }
         ARC_FREE(g->nodes[i].ports);
         ARC_FREE(g->nodes[i].cyclic_order);

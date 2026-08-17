@@ -131,4 +131,108 @@ TEST(test_L1_08_mutual_recursion) {
     arc_service_free(r);
 }
 
+/* ================================================================
+ * L1.09: Bubble sort — sort [5,3,8,1,2], return arr[0] = 1
+ * ================================================================ */
+TEST(test_L1_09_bubble_sort) {
+    ArcServiceResult* r = run_fixture_L1("L1_09_bubble_sort.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 1);
+    arc_service_free(r);
+}
+
+/* ================================================================
+ * L1.10: Binary search — find 7 in sorted array, index = 3
+ * ================================================================ */
+TEST(test_L1_10_binary_search) {
+    ArcServiceResult* r = run_fixture_L1("L1_10_binary_search.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 3);
+    arc_service_free(r);
+}
+
+/* ================================================================
+ * L1.11: Selection sort — sort [4,2,7,1,3], return max = 7
+ * ================================================================ */
+TEST(test_L1_11_selection_sort) {
+    ArcServiceResult* r = run_fixture_L1("L1_11_selection_sort.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 7);
+    arc_service_free(r);
+}
+
+/* ================================================================
+ * L1.12: Max subarray (Kadane's) — max sum = 6
+ * ================================================================ */
+TEST(test_L1_12_max_subarray) {
+    ArcServiceResult* r = run_fixture_L1("L1_12_max_subarray.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 6);
+    arc_service_free(r);
+}
+
+/* ================================================================
+ * L1.13: Insertion sort — sort [9,5,1,4,3], return arr[2] = 4
+ * ================================================================ */
+TEST(test_L1_13_insertion_sort) {
+    ArcServiceResult* r = run_fixture_L1("L1_13_insertion_sort.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 4);
+    arc_service_free(r);
+}
+
+/* ================================================================
+ * L1.14: Two Sum — find pair summing to 9, return i+j = 1
+ * ================================================================ */
+TEST(test_L1_14_two_sum) {
+    ArcServiceResult* r = run_fixture_L1("L1_14_two_sum.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 1);
+    arc_service_free(r);
+}
+
+/* ================================================================
+ * L1.15: Record/struct — Point{x=3,y=4}, distance_sq = 25
+ * ================================================================ */
+TEST(test_L1_15_record_point) {
+    ArcServiceResult* r = run_fixture_L1("L1_15_record_point.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 25);
+    arc_service_free(r);
+}
+
+/* ================================================================
+ * L1.16: Linked list sum using records — 10+20+30 = 60
+ * ================================================================ */
+TEST(test_L1_16_linked_list) {
+    ArcServiceResult* r = run_fixture_L1("L1_16_linked_list.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 60);
+    arc_service_free(r);
+}
+
 /* Tests registered in test_all.c */

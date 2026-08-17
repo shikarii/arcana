@@ -1,0 +1,155 @@
+; Level 1.11: Selection sort — sort and return last element (max)
+; Sort [4,2,7,1,3] and return arr[4] (should be 7)
+; Expected result: i64(7)
+region r0 module
+region fb function parent=r0
+region wob loop_body parent=fb
+region wib loop_body parent=wob
+region ift then parent=wib
+
+; def selection_sort(arr, n):
+node fdef func_def(selection_sort) in r0 body_region=fb arity=2
+node p_arr param(arr) in fb
+node p_n param(n) in fb
+
+;   let i = 0
+node c0a const_int(0) in fb
+node li let(i) in fb
+edge e01 c0a.out -> li.value
+
+;   while i < n - 1:
+node vri var_ref(i) in fb
+node vrn var_ref(n) in fb
+node c1a const_int(1) in fb
+node sub1 sub in fb
+edge e02 vrn.out -> sub1.lhs
+edge e03 c1a.out -> sub1.rhs
+node cmp1 lt in fb
+edge e04 vri.out -> cmp1.lhs
+edge e05 sub1.out -> cmp1.rhs
+node w1 while in fb body_region=wob
+edge e06 cmp1.out -> w1.cond
+
+;     let min_idx = i
+node vri2 var_ref(i) in wob
+node lmi let(min_idx) in wob
+edge e07 vri2.out -> lmi.value
+
+;     let j = i + 1
+node vri3 var_ref(i) in wob
+node c1b const_int(1) in wob
+node add1 add in wob
+edge e08 vri3.out -> add1.lhs
+edge e09 c1b.out -> add1.rhs
+node lj let(j) in wob
+edge e10 add1.out -> lj.value
+
+;     while j < n:
+node vrj var_ref(j) in wob
+node vrn2 var_ref(n) in wob
+node cmp2 lt in wob
+edge e11 vrj.out -> cmp2.lhs
+edge e12 vrn2.out -> cmp2.rhs
+node w2 while in wob body_region=wib
+edge e13 cmp2.out -> w2.cond
+
+;       if arr[j] < arr[min_idx]: min_idx = j
+node vra1 var_ref(arr) in wib
+node vrj2 var_ref(j) in wib
+node ig1 index_get in wib
+edge e14 vra1.out -> ig1.lhs
+edge e15 vrj2.out -> ig1.rhs
+node vra2 var_ref(arr) in wib
+node vrmi var_ref(min_idx) in wib
+node ig2 index_get in wib
+edge e16 vra2.out -> ig2.lhs
+edge e17 vrmi.out -> ig2.rhs
+node cmp3 lt in wib
+edge e18 ig1.out -> cmp3.lhs
+edge e19 ig2.out -> cmp3.rhs
+node iff if in wib then_region=ift
+edge e20 cmp3.out -> iff.cond
+
+node vrj3 var_ref(j) in ift
+node ami assign(min_idx) in ift
+edge e21 vrj3.out -> ami.value
+
+;       j = j + 1
+node vrj4 var_ref(j) in wib
+node c1c const_int(1) in wib
+node add2 add in wib
+edge e22 vrj4.out -> add2.lhs
+edge e23 c1c.out -> add2.rhs
+node aj assign(j) in wib
+edge e24 add2.out -> aj.value
+
+;     swap arr[i] and arr[min_idx]
+node vra3 var_ref(arr) in wob
+node vri4 var_ref(i) in wob
+node ig3 index_get in wob
+edge e25 vra3.out -> ig3.lhs
+edge e26 vri4.out -> ig3.rhs
+node ltmp let(tmp) in wob
+edge e27 ig3.out -> ltmp.value
+
+; arr[i] = arr[min_idx]
+node vra4 var_ref(arr) in wob
+node vri5 var_ref(i) in wob
+node vra5 var_ref(arr) in wob
+node vrmi2 var_ref(min_idx) in wob
+node ig4 index_get in wob
+edge e28 vra5.out -> ig4.lhs
+edge e29 vrmi2.out -> ig4.rhs
+node is1 index_set in wob
+edge e30 vra4.out -> is1.container
+edge e31 vri5.out -> is1.key
+edge e32 ig4.out -> is1.value
+
+; arr[min_idx] = tmp
+node vra6 var_ref(arr) in wob
+node vrmi3 var_ref(min_idx) in wob
+node vrtmp var_ref(tmp) in wob
+node is2 index_set in wob
+edge e33 vra6.out -> is2.container
+edge e34 vrmi3.out -> is2.key
+edge e35 vrtmp.out -> is2.value
+
+;     i = i + 1
+node vri6 var_ref(i) in wob
+node c1d const_int(1) in wob
+node add3 add in wob
+edge e36 vri6.out -> add3.lhs
+edge e37 c1d.out -> add3.rhs
+node ai assign(i) in wob
+edge e38 add3.out -> ai.value
+
+;   return arr[n-1]
+node vra7 var_ref(arr) in fb
+node vrn3 var_ref(n) in fb
+node c1e const_int(1) in fb
+node sub2 sub in fb
+edge e39 vrn3.out -> sub2.lhs
+edge e40 c1e.out -> sub2.rhs
+node ig5 index_get in fb
+edge e41 vra7.out -> ig5.lhs
+edge e42 sub2.out -> ig5.rhs
+node ret return in fb
+edge e43 ig5.out -> ret.value
+
+; main: [4,2,7,1,3] => selection_sort => last element = 7
+node v4 const_int(4) in r0
+node v2 const_int(2) in r0
+node v7 const_int(7) in r0
+node v1 const_int(1) in r0
+node v3 const_int(3) in r0
+node arr array_literal in r0
+edge e44 v4.out -> arr.item0
+edge e45 v2.out -> arr.item1
+edge e46 v7.out -> arr.item2
+edge e47 v1.out -> arr.item3
+edge e48 v3.out -> arr.item4
+node c5 const_int(5) in r0
+node call func_call(selection_sort) in r0
+edge e49 arr.out -> call.arg0
+edge e50 c5.out -> call.arg1
+root call.out

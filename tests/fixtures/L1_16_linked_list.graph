@@ -1,0 +1,126 @@
+; Level 1.16: Linked list sum using records
+; Build list: 10 -> 20 -> 30 -> null
+; Walk the list summing values, return 60
+; Expected result: i64(60)
+region r0 module
+region fb function parent=r0
+region wbody loop_body parent=fb
+region ift then parent=wbody
+
+; def make_node(val, next):
+;   return Node{val=val, next=next}
+region fmb function parent=r0
+node fmake func_def(make_node) in r0 body_region=fmb arity=2
+node pmv param(val) in fmb
+node pmn param(next) in fmb
+node mrec record_new(Node) in fmb
+node mvrv var_ref(val) in fmb
+node mfs1 field_set(val) in fmb
+edge e01 mrec.out -> mfs1.record
+edge e02 mvrv.out -> mfs1.value
+node mvrn var_ref(next) in fmb
+node mfs2 field_set(next) in fmb
+edge e03 mfs1.out -> mfs2.record
+edge e04 mvrn.out -> mfs2.value
+node mret return in fmb
+edge e05 mfs2.out -> mret.value
+
+; def sum_list(head):
+node fdef func_def(sum_list) in r0 body_region=fb arity=1
+node phead param(head) in fb
+
+;   let sum = 0
+node c0 const_int(0) in fb
+node lsum let(sum) in fb
+edge e06 c0.out -> lsum.value
+
+;   let curr = head
+node vrhead var_ref(head) in fb
+node lcurr let(curr) in fb
+edge e07 vrhead.out -> lcurr.value
+
+;   let done = 0
+node c0b const_int(0) in fb
+node ldone let(done) in fb
+edge e08 c0b.out -> ldone.value
+
+;   while done == 0:
+node vrdone var_ref(done) in fb
+node c0c const_int(0) in fb
+node ceq eq in fb
+edge e09 vrdone.out -> ceq.lhs
+edge e10 c0c.out -> ceq.rhs
+node wh while in fb body_region=wbody
+edge e11 ceq.out -> wh.cond
+
+;     if curr == null: done = 1
+; Actually we need to check curr type. Let's use a counter approach instead.
+; We know there are 3 nodes, so iterate 3 times.
+
+; Simpler approach: use a counter-based walk
+;   Let me restructure with known length
+
+; Actually, let me use: while curr != null (compare to const_null)
+; Problem: the `neq` comparison with null might not work for objects.
+; Let me check: null is VAL_NULL, record is VAL_OBJ. neq should work.
+
+;     sum = sum + curr.val
+node vrcurr var_ref(curr) in wbody
+node fgv field_get(val) in wbody
+edge e12 vrcurr.out -> fgv.value
+node vrsum var_ref(sum) in wbody
+node add1 add in wbody
+edge e13 vrsum.out -> add1.lhs
+edge e14 fgv.out -> add1.rhs
+node asum assign(sum) in wbody
+edge e15 add1.out -> asum.value
+
+;     let next_node = curr.next
+node vrcurr2 var_ref(curr) in wbody
+node fgn field_get(next) in wbody
+edge e16 vrcurr2.out -> fgn.value
+node lnext let(next_node) in wbody
+edge e17 fgn.out -> lnext.value
+
+;     curr = next_node
+node vrnext var_ref(next_node) in wbody
+node acurr assign(curr) in wbody
+edge e18 vrnext.out -> acurr.value
+
+;     if curr is null: done = 1
+; Use: if curr == null
+node vrcurr3 var_ref(curr) in wbody
+node cnull const_null in wbody
+node ceq2 eq in wbody
+edge e19 vrcurr3.out -> ceq2.lhs
+edge e20 cnull.out -> ceq2.rhs
+node iff if in wbody then_region=ift
+edge e21 ceq2.out -> iff.cond
+node c1 const_int(1) in ift
+node adone assign(done) in ift
+edge e22 c1.out -> adone.value
+
+;   return sum
+node vrsum2 var_ref(sum) in fb
+node ret return in fb
+edge e23 vrsum2.out -> ret.value
+
+; main: build 10 -> 20 -> 30 -> null
+node cnull2 const_null in r0
+node c30 const_int(30) in r0
+node call1 func_call(make_node) in r0
+edge e24 c30.out -> call1.arg0
+edge e25 cnull2.out -> call1.arg1
+node c20 const_int(20) in r0
+node call2 func_call(make_node) in r0
+edge e26 c20.out -> call2.arg0
+edge e27 call1.out -> call2.arg1
+node c10 const_int(10) in r0
+node call3 func_call(make_node) in r0
+edge e28 c10.out -> call3.arg0
+edge e29 call2.out -> call3.arg1
+
+; sum_list(head)
+node call4 func_call(sum_list) in r0
+edge e30 call3.out -> call4.arg0
+root call4.out

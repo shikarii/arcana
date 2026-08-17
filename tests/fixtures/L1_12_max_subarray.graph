@@ -1,0 +1,128 @@
+; Level 1.12: Maximum subarray sum (Kadane's algorithm)
+; arr = [-2, 1, -3, 4, -1, 2, 1, -5, 4]
+; max subarray = [4, -1, 2, 1] = 6
+; Expected result: i64(6)
+region r0 module
+region fb function parent=r0
+region wbody loop_body parent=fb
+region ift then parent=wbody
+region ift2 then parent=wbody
+
+; def max_subarray(arr, n):
+node fdef func_def(max_subarray) in r0 body_region=fb arity=2
+node p_arr param(arr) in fb
+node p_n param(n) in fb
+
+;   let max_ending = arr[0]
+node vra1 var_ref(arr) in fb
+node c0 const_int(0) in fb
+node ig1 index_get in fb
+edge e01 vra1.out -> ig1.lhs
+edge e02 c0.out -> ig1.rhs
+node lme let(max_ending) in fb
+edge e03 ig1.out -> lme.value
+
+;   let max_so_far = arr[0]
+node vra2 var_ref(arr) in fb
+node c0b const_int(0) in fb
+node ig2 index_get in fb
+edge e04 vra2.out -> ig2.lhs
+edge e05 c0b.out -> ig2.rhs
+node lmsf let(max_so_far) in fb
+edge e06 ig2.out -> lmsf.value
+
+;   let i = 1
+node c1 const_int(1) in fb
+node li let(i) in fb
+edge e07 c1.out -> li.value
+
+;   while i < n:
+node vri var_ref(i) in fb
+node vrn var_ref(n) in fb
+node clt lt in fb
+edge e08 vri.out -> clt.lhs
+edge e09 vrn.out -> clt.rhs
+node wh while in fb body_region=wbody
+edge e10 clt.out -> wh.cond
+
+;     let cur = arr[i]
+node vra3 var_ref(arr) in wbody
+node vri2 var_ref(i) in wbody
+node ig3 index_get in wbody
+edge e11 vra3.out -> ig3.lhs
+edge e12 vri2.out -> ig3.rhs
+node lcur let(cur) in wbody
+edge e13 ig3.out -> lcur.value
+
+;     max_ending = max_ending + cur
+node vrme var_ref(max_ending) in wbody
+node vrcur var_ref(cur) in wbody
+node add1 add in wbody
+edge e14 vrme.out -> add1.lhs
+edge e15 vrcur.out -> add1.rhs
+node ame assign(max_ending) in wbody
+edge e16 add1.out -> ame.value
+
+;     if cur > max_ending: max_ending = cur
+node vrcur2 var_ref(cur) in wbody
+node vrme2 var_ref(max_ending) in wbody
+node cgt gt in wbody
+edge e17 vrcur2.out -> cgt.lhs
+edge e18 vrme2.out -> cgt.rhs
+node iff if in wbody then_region=ift
+edge e19 cgt.out -> iff.cond
+node vrcur3 var_ref(cur) in ift
+node ame2 assign(max_ending) in ift
+edge e20 vrcur3.out -> ame2.value
+
+;     if max_ending > max_so_far: max_so_far = max_ending
+node vrme3 var_ref(max_ending) in wbody
+node vrmsf var_ref(max_so_far) in wbody
+node cgt2 gt in wbody
+edge e21 vrme3.out -> cgt2.lhs
+edge e22 vrmsf.out -> cgt2.rhs
+node iff2 if in wbody then_region=ift2
+edge e23 cgt2.out -> iff2.cond
+node vrme4 var_ref(max_ending) in ift2
+node amsf assign(max_so_far) in ift2
+edge e24 vrme4.out -> amsf.value
+
+;     i = i + 1
+node vri3 var_ref(i) in wbody
+node c1b const_int(1) in wbody
+node add2 add in wbody
+edge e25 vri3.out -> add2.lhs
+edge e26 c1b.out -> add2.rhs
+node ai assign(i) in wbody
+edge e27 add2.out -> ai.value
+
+;   return max_so_far
+node vrmsf2 var_ref(max_so_far) in fb
+node ret return in fb
+edge e28 vrmsf2.out -> ret.value
+
+; main: [-2, 1, -3, 4, -1, 2, 1, -5, 4]
+node vm2 const_int(-2) in r0
+node v1 const_int(1) in r0
+node vm3 const_int(-3) in r0
+node v4 const_int(4) in r0
+node vm1 const_int(-1) in r0
+node v2a const_int(2) in r0
+node v1a const_int(1) in r0
+node vm5 const_int(-5) in r0
+node v4a const_int(4) in r0
+node arr array_literal in r0
+edge e29 vm2.out -> arr.item0
+edge e30 v1.out -> arr.item1
+edge e31 vm3.out -> arr.item2
+edge e32 v4.out -> arr.item3
+edge e33 vm1.out -> arr.item4
+edge e34 v2a.out -> arr.item5
+edge e35 v1a.out -> arr.item6
+edge e36 vm5.out -> arr.item7
+edge e37 v4a.out -> arr.item8
+node c9 const_int(9) in r0
+node call func_call(max_subarray) in r0
+edge e38 arr.out -> call.arg0
+edge e39 c9.out -> call.arg1
+root call.out

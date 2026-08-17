@@ -86,6 +86,44 @@ static ArcRegionKind parse_region_kind(const char* s) {
     return ARC_REGION_MODULE;
 }
 
+/* Table-driven node kind lookup */
+static const struct { const char* name; ArcNodeKind kind; } kind_table[] = {
+    {"const_int",ARC_NODE_CONST_INT}, {"const_float",ARC_NODE_CONST_FLOAT},
+    {"const_bool",ARC_NODE_CONST_BOOL}, {"const_null",ARC_NODE_CONST_NULL},
+    {"const_string",ARC_NODE_CONST_STRING},
+    {"add",ARC_NODE_ADD}, {"sub",ARC_NODE_SUB}, {"mul",ARC_NODE_MUL},
+    {"div",ARC_NODE_DIV}, {"mod",ARC_NODE_MOD}, {"neg",ARC_NODE_NEG},
+    {"eq",ARC_NODE_EQ}, {"neq",ARC_NODE_NEQ}, {"lt",ARC_NODE_LT},
+    {"le",ARC_NODE_LE}, {"gt",ARC_NODE_GT}, {"ge",ARC_NODE_GE},
+    {"not",ARC_NODE_NOT}, {"and",ARC_NODE_AND}, {"or",ARC_NODE_OR},
+    {"if",ARC_NODE_IF}, {"while",ARC_NODE_WHILE},
+    {"let",ARC_NODE_LET}, {"var_ref",ARC_NODE_VAR_REF}, {"assign",ARC_NODE_ASSIGN},
+    {"func_def",ARC_NODE_FUNC_DEF}, {"func_call",ARC_NODE_FUNC_CALL},
+    {"param",ARC_NODE_PARAM}, {"return",ARC_NODE_RETURN},
+    {"print",ARC_NODE_PRINT}, {"root_output",ARC_NODE_ROOT_OUTPUT},
+    {"sequence",ARC_NODE_SEQUENCE}, {"cycle",ARC_NODE_CYCLE}, {"break_if",ARC_NODE_BREAK_IF},
+    {"bit_and",ARC_NODE_BIT_AND}, {"bit_or",ARC_NODE_BIT_OR},
+    {"bit_xor",ARC_NODE_BIT_XOR}, {"bit_not",ARC_NODE_BIT_NOT},
+    {"shl",ARC_NODE_SHL}, {"shr",ARC_NODE_SHR},
+    {"cast_i64",ARC_NODE_CAST_I64}, {"cast_f64",ARC_NODE_CAST_F64},
+    {"cast_str",ARC_NODE_CAST_STR},
+    {"array_literal",ARC_NODE_ARRAY_LITERAL}, {"map_literal",ARC_NODE_MAP_LITERAL},
+    {"index_get",ARC_NODE_INDEX_GET}, {"index_set",ARC_NODE_INDEX_SET},
+    {"str_len",ARC_NODE_STR_LEN}, {"str_slice",ARC_NODE_STR_SLICE},
+    {"str_index",ARC_NODE_STR_INDEX}, {"length",ARC_NODE_LENGTH},
+    {"try",ARC_NODE_TRY}, {"throw",ARC_NODE_THROW},
+    {"closure",ARC_NODE_CLOSURE}, {"intrinsic_call",ARC_NODE_INTRINSIC_CALL},
+    {"record_new",ARC_NODE_RECORD_NEW}, {"field_get",ARC_NODE_FIELD_GET},
+    {"field_set",ARC_NODE_FIELD_SET},
+    {NULL, ARC_NODE_CONST_NULL}
+};
+
+static ArcNodeKind lookup_kind(const char* name) {
+    for (int i = 0; kind_table[i].name; i++)
+        if (strcmp(kind_table[i].name, name) == 0) return kind_table[i].kind;
+    return ARC_NODE_CONST_NULL;
+}
+
 static ArcNodeKind parse_node_kind(const char* s, char* attr_buf, size_t attr_sz) {
     attr_buf[0] = '\0';
     const char* paren = strchr(s, '(');
@@ -103,39 +141,7 @@ static ArcNodeKind parse_node_kind(const char* s, char* attr_buf, size_t attr_sz
     } else {
         snprintf(kind, sizeof(kind), "%s", s);
     }
-
-    if (strcmp(kind, "const_int") == 0) return ARC_NODE_CONST_INT;
-    if (strcmp(kind, "const_float") == 0) return ARC_NODE_CONST_FLOAT;
-    if (strcmp(kind, "const_bool") == 0) return ARC_NODE_CONST_BOOL;
-    if (strcmp(kind, "const_null") == 0) return ARC_NODE_CONST_NULL;
-    if (strcmp(kind, "add") == 0) return ARC_NODE_ADD;
-    if (strcmp(kind, "sub") == 0) return ARC_NODE_SUB;
-    if (strcmp(kind, "mul") == 0) return ARC_NODE_MUL;
-    if (strcmp(kind, "div") == 0) return ARC_NODE_DIV;
-    if (strcmp(kind, "mod") == 0) return ARC_NODE_MOD;
-    if (strcmp(kind, "neg") == 0) return ARC_NODE_NEG;
-    if (strcmp(kind, "eq") == 0) return ARC_NODE_EQ;
-    if (strcmp(kind, "neq") == 0) return ARC_NODE_NEQ;
-    if (strcmp(kind, "lt") == 0) return ARC_NODE_LT;
-    if (strcmp(kind, "le") == 0) return ARC_NODE_LE;
-    if (strcmp(kind, "gt") == 0) return ARC_NODE_GT;
-    if (strcmp(kind, "ge") == 0) return ARC_NODE_GE;
-    if (strcmp(kind, "not") == 0) return ARC_NODE_NOT;
-    if (strcmp(kind, "if") == 0) return ARC_NODE_IF;
-    if (strcmp(kind, "while") == 0) return ARC_NODE_WHILE;
-    if (strcmp(kind, "let") == 0) return ARC_NODE_LET;
-    if (strcmp(kind, "var_ref") == 0) return ARC_NODE_VAR_REF;
-    if (strcmp(kind, "assign") == 0) return ARC_NODE_ASSIGN;
-    if (strcmp(kind, "func_def") == 0) return ARC_NODE_FUNC_DEF;
-    if (strcmp(kind, "func_call") == 0) return ARC_NODE_FUNC_CALL;
-    if (strcmp(kind, "param") == 0) return ARC_NODE_PARAM;
-    if (strcmp(kind, "return") == 0) return ARC_NODE_RETURN;
-    if (strcmp(kind, "print") == 0) return ARC_NODE_PRINT;
-    if (strcmp(kind, "root_output") == 0) return ARC_NODE_ROOT_OUTPUT;
-    if (strcmp(kind, "sequence") == 0) return ARC_NODE_SEQUENCE;
-    if (strcmp(kind, "cycle") == 0) return ARC_NODE_CYCLE;
-    if (strcmp(kind, "break_if") == 0) return ARC_NODE_BREAK_IF;
-    return ARC_NODE_CONST_NULL;
+    return lookup_kind(kind);
 }
 
 /* --- Add default output-only port --- */
@@ -178,27 +184,59 @@ static void add_default_ports(ParseState* s, const char* node_name, ArcNodeId ni
     switch (kind) {
     case ARC_NODE_CONST_INT: case ARC_NODE_CONST_FLOAT:
     case ARC_NODE_CONST_BOOL: case ARC_NODE_CONST_NULL:
-    case ARC_NODE_VAR_REF:
+    case ARC_NODE_CONST_STRING: case ARC_NODE_VAR_REF:
         add_output_port(s, node_name, nid); break;
     case ARC_NODE_ADD: case ARC_NODE_SUB: case ARC_NODE_MUL:
     case ARC_NODE_DIV: case ARC_NODE_MOD: case ARC_NODE_EQ:
     case ARC_NODE_NEQ: case ARC_NODE_LT: case ARC_NODE_LE:
     case ARC_NODE_GT: case ARC_NODE_GE:
+    case ARC_NODE_AND: case ARC_NODE_OR:
+    case ARC_NODE_BIT_AND: case ARC_NODE_BIT_OR: case ARC_NODE_BIT_XOR:
+    case ARC_NODE_SHL: case ARC_NODE_SHR:
+    case ARC_NODE_INDEX_GET: case ARC_NODE_STR_INDEX:
         add_binary_ports(s, node_name, nid); break;
-    case ARC_NODE_NEG: case ARC_NODE_NOT:
+    case ARC_NODE_NEG: case ARC_NODE_NOT: case ARC_NODE_BIT_NOT:
+    case ARC_NODE_CAST_I64: case ARC_NODE_CAST_F64: case ARC_NODE_CAST_STR:
+    case ARC_NODE_STR_LEN: case ARC_NODE_LENGTH:
         add_unary_ports(s, node_name, nid); break;
     case ARC_NODE_LET: case ARC_NODE_ASSIGN:
     case ARC_NODE_PRINT: case ARC_NODE_ROOT_OUTPUT:
-    case ARC_NODE_RETURN:
+    case ARC_NODE_RETURN: case ARC_NODE_THROW:
     case ARC_NODE_IF: case ARC_NODE_WHILE:
         add_input_port(s, node_name, nid,
                        (kind == ARC_NODE_IF || kind == ARC_NODE_WHILE) ? "cond" : "value");
         break;
-    case ARC_NODE_FUNC_CALL:
+    case ARC_NODE_FUNC_CALL: case ARC_NODE_INTRINSIC_CALL:
+        add_output_port(s, node_name, nid); break;
+    case ARC_NODE_ARRAY_LITERAL: case ARC_NODE_MAP_LITERAL:
+        add_output_port(s, node_name, nid); break;
+    case ARC_NODE_CLOSURE:
+        add_input_port(s, node_name, nid, "func");
+        add_output_port(s, node_name, nid); break;
+    case ARC_NODE_INDEX_SET: {
+        add_input_port(s, node_name, nid, "container");
+        add_input_port(s, node_name, nid, "key");
+        add_input_port(s, node_name, nid, "value");
+        break;
+    }
+    case ARC_NODE_STR_SLICE: {
+        add_input_port(s, node_name, nid, "value");
+        add_input_port(s, node_name, nid, "start");
+        add_input_port(s, node_name, nid, "end");
+        add_output_port(s, node_name, nid); break;
+    }
+    case ARC_NODE_RECORD_NEW:
+        add_output_port(s, node_name, nid); break;
+    case ARC_NODE_FIELD_GET:
+        add_input_port(s, node_name, nid, "value");
+        add_output_port(s, node_name, nid); break;
+    case ARC_NODE_FIELD_SET:
+        add_input_port(s, node_name, nid, "record");
+        add_input_port(s, node_name, nid, "value");
         add_output_port(s, node_name, nid); break;
     case ARC_NODE_BREAK_IF:
         add_input_port(s, node_name, nid, "cond"); break;
-    case ARC_NODE_CYCLE: break; /* no default ports */
+    case ARC_NODE_TRY: case ARC_NODE_CYCLE: break;
     default: break;
     }
 }
@@ -217,7 +255,10 @@ static const char* parse_ports_spec(ParseState* s, const char* node_name, ArcNod
             ArcPortDir dir = ARC_PORT_OUTPUT;
             if (strcmp(role, "lhs") == 0 || strcmp(role, "rhs") == 0 ||
                 strcmp(role, "value") == 0 || strcmp(role, "cond") == 0 ||
-                strncmp(role, "arg", 3) == 0)
+                strcmp(role, "container") == 0 || strcmp(role, "key") == 0 ||
+                strcmp(role, "start") == 0 || strcmp(role, "end") == 0 ||
+                strcmp(role, "func") == 0 || strcmp(role, "record") == 0 ||
+                strncmp(role, "arg", 3) == 0 || strncmp(role, "item", 4) == 0)
                 dir = ARC_PORT_INPUT;
             ArcPortId pid = arc_graph_add_port(s->graph, nid, dir, role);
             register_port(s, node_name, role, pid, nid);
@@ -275,9 +316,13 @@ static const char* parse_node_attrs(ParseState* s, ArcNodeId nid, ArcNodeKind ki
             else if (kind == ARC_NODE_FUNC_DEF) n->attr.func.body_region = find_region(s, val);
             else if (kind == ARC_NODE_CYCLE) n->attr.cycle.body_region = find_region(s, val);
         }
+        else if (strcmp(key, "try_region") == 0) n->attr.try_catch.try_region = find_region(s, val);
+        else if (strcmp(key, "catch_region") == 0) n->attr.try_catch.catch_region = find_region(s, val);
         else if (strcmp(key, "arity") == 0) {
             if (kind == ARC_NODE_FUNC_DEF) n->attr.func.arity = (uint8_t)atoi(val);
         }
+        else if (strcmp(key, "count") == 0) n->attr.collection.count = (uint16_t)atoi(val);
+        else if (strcmp(key, "id") == 0) n->attr.intrinsic.id = (uint16_t)atoi(val);
     }
     return p;
 }
@@ -323,7 +368,18 @@ static void set_node_attr(ArcNode* n, ArcNodeKind kind, const char* attr_buf) {
         n->attr.func.body_region = ARC_INVALID_ID;
         break;
     case ARC_NODE_FUNC_CALL:
+    case ARC_NODE_RECORD_NEW: case ARC_NODE_FIELD_GET: case ARC_NODE_FIELD_SET:
         n->attr.name = arc_strdup(attr_buf); break;
+    case ARC_NODE_CONST_STRING:
+        n->attr.string_value.data = arc_strdup(attr_buf);
+        n->attr.string_value.len = (uint32_t)strlen(attr_buf); break;
+    case ARC_NODE_ARRAY_LITERAL: case ARC_NODE_MAP_LITERAL:
+        n->attr.collection.count = attr_buf[0] ? (uint16_t)atoi(attr_buf) : 0; break;
+    case ARC_NODE_INTRINSIC_CALL:
+        n->attr.intrinsic.id = attr_buf[0] ? (uint16_t)atoi(attr_buf) : 0; break;
+    case ARC_NODE_TRY:
+        n->attr.try_catch.try_region = ARC_INVALID_ID;
+        n->attr.try_catch.catch_region = ARC_INVALID_ID; break;
     default: break;
     }
 }
@@ -383,7 +439,8 @@ static void parse_cmd_edge(ParseState* s, const char* line) {
     ArcPortId from_port = find_port(s, from_node, from_role);
     ArcPortId to_port = find_port(s, to_node, to_role);
 
-    if (to_port == ARC_INVALID_ID && strncmp(to_role, "arg", 3) == 0) {
+    if (to_port == ARC_INVALID_ID &&
+        (strncmp(to_role, "arg", 3) == 0 || strncmp(to_role, "item", 4) == 0)) {
         ArcNodeId tn = find_node(s, to_node);
         if (tn != ARC_INVALID_ID) {
             to_port = arc_graph_add_port(s->graph, tn, ARC_PORT_INPUT, to_role);

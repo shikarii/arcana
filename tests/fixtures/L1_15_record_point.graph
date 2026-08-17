@@ -1,0 +1,56 @@
+; Level 1.15: Record/struct — Point
+; Create Point{x=3, y=4}, compute x*x + y*y = 25
+; Expected result: i64(25)
+region r0 module
+region fb function parent=r0
+
+; def distance_sq(p):
+node fdef func_def(distance_sq) in r0 body_region=fb arity=1
+node pp param(p) in fb
+
+;   let x = p.x
+node vrp1 var_ref(p) in fb
+node fg1 field_get(x) in fb
+edge e01 vrp1.out -> fg1.value
+node lx let(x) in fb
+edge e02 fg1.out -> lx.value
+
+;   let y = p.y
+node vrp2 var_ref(p) in fb
+node fg2 field_get(y) in fb
+edge e03 vrp2.out -> fg2.value
+node ly let(y) in fb
+edge e04 fg2.out -> ly.value
+
+;   return x*x + y*y
+node vrx1 var_ref(x) in fb
+node vrx2 var_ref(x) in fb
+node m1 mul in fb
+edge e05 vrx1.out -> m1.lhs
+edge e06 vrx2.out -> m1.rhs
+node vry1 var_ref(y) in fb
+node vry2 var_ref(y) in fb
+node m2 mul in fb
+edge e07 vry1.out -> m2.lhs
+edge e08 vry2.out -> m2.rhs
+node a1 add in fb
+edge e09 m1.out -> a1.lhs
+edge e10 m2.out -> a1.rhs
+node ret return in fb
+edge e11 a1.out -> ret.value
+
+; main: create Point{x=3, y=4}
+node rec record_new(Point) in r0
+node c3 const_int(3) in r0
+node fs1 field_set(x) in r0
+edge e12 rec.out -> fs1.record
+edge e13 c3.out -> fs1.value
+node c4 const_int(4) in r0
+node fs2 field_set(y) in r0
+edge e14 fs1.out -> fs2.record
+edge e15 c4.out -> fs2.value
+
+; call distance_sq(point)
+node call func_call(distance_sq) in r0
+edge e16 fs2.out -> call.arg0
+root call.out
