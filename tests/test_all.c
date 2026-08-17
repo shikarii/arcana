@@ -452,6 +452,28 @@ static void run_challenge_L0_tests(void) {
     RUN(test_L0_12_invalid_rejection);
 }
 
+/* --- test_service.c --- */
+extern void test_service_run_ok(void);
+extern void test_service_run_add(void);
+extern void test_service_run_parse_fail(void);
+extern void test_service_check_ok(void);
+extern void test_service_compile_ok(void);
+extern void test_service_check_parse_fail(void);
+extern void test_service_diagnostics(void);
+extern void test_service_error_empty_on_success(void);
+
+static void run_service_tests(void) {
+    printf("\n[Tooling Service API]\n");
+    RUN(test_service_run_ok);
+    RUN(test_service_run_add);
+    RUN(test_service_run_parse_fail);
+    RUN(test_service_check_ok);
+    RUN(test_service_compile_ok);
+    RUN(test_service_check_parse_fail);
+    RUN(test_service_diagnostics);
+    RUN(test_service_error_empty_on_success);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -471,6 +493,7 @@ int main(void) {
     run_cycle_tests();
     run_closure_tests();
     run_challenge_L0_tests();
+    run_service_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);
