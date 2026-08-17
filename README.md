@@ -4,12 +4,13 @@ Arcana is a programming language whose canonical source representation is a
 topology-aware semantic graph — drawn magic circles — rather than conventional
 text. The compiler operates on discrete topological facts (nodes, directed
 edges, region containment, cyclic port order) and lowers them through a
-standard pipeline to stack-based bytecode executed by a small VM.
+multi-stage pipeline (HIR → MIR → bytecode) to a stack-based VM with
+mark-sweep garbage collection.
 
-This is an early-stage project. The v0 prototype implements a compiler,
-bytecode VM, verifier, reference interpreter, and CLI toolchain in C17.
-It can compile and run programs with functions, branching, loops, and
-recursion (`fib(10) == 55`).
+This is an early-stage project implemented in C17. The prototype compiles
+and runs programs with functions, branching, loops, recursion, closures,
+exceptions, strings, arrays, maps, bitwise ops, type casts, and 9 intrinsics
+(`fib(10) == 55`).
 
 | Resource              | Link                                           |
 |-----------------------|------------------------------------------------|
@@ -34,7 +35,7 @@ exist only as engineering tools.
 
 ## Build instructions
 
-Requirements: CMake 3.16+, a C17 compiler (GCC, Clang, or MSVC).
+Requirements: CMake 3.16+, a C17 compiler (GCC, Clang, or MSVC), Python 3.
 
 ```bash
 cmake -B build -S .
@@ -45,12 +46,14 @@ cmake --build build
 
 ```bash
 cmake --build build
-ctest --test-dir build -V
+ctest --test-dir build -C Debug -V
 ```
 
-The test suite covers bytecode encoding, VM execution, semantic graph
-validation, compiler passes, and end-to-end programs. There are currently
-46 tests.
+CTest runs two tests:
+1. **arcana_tests** — 123 unit/integration tests across 10 per-module test files
+2. **check_limits** — LOC enforcement (600 lines/file, 60 lines/function)
+
+CI runs on Linux, Windows (MSVC), macOS, and with sanitizers (ASan + UBSan).
 
 ## CLI tools
 
@@ -74,16 +77,23 @@ Example:
 
 ```
 src/
-  common/           Typed IDs, result types, memory helpers
+  common/           Typed IDs, result types, memory helpers, arena allocator
   semantic_graph/   Topology-aware program graph, validation, fixture parser
-  compiler/         Semantic graph → bytecode compilation, diagnostics
-  bytecode/         Opcode definitions, .mgc binary format, disassembler
-  vm/               Stack-based VM, tagged values, call frames
+  semantic/         Graph → HIR lowering, scope resolution, error recovery
+  hir/              High-level IR (expression trees, resolved variables)
+  mir/              Mid-level IR (basic blocks, terminaries, SSA-like temps)
+  typecheck/        Type inference and checking pass
+  compiler/         HIR/Graph → bytecode compilation, diagnostics
+  bytecode/         41 opcodes (X-macro), .mgc binary format, disassembler
+  runtime/          Unified object model (string/array/map/closure/record), GC
+  vm/               Stack-based VM, tagged values, call frames, 9 intrinsics
   verifier/         Independent bytecode verification
   interpreter/      Reference interpreter (direct graph evaluation)
-tools/              CLI tool sources
-tests/              Test suite and fixtures
-docs/               Architecture decisions, engineering standards
+  platform/         Platform abstraction (file I/O, clock, strdup)
+tools/              CLI tool sources, LOC checker
+tests/              10 per-module test files + driver
+docs/               Architecture, engineering standards, design guardrails
+benchmarks/         Compile benchmark
 ```
 
 ## Architecture
@@ -92,14 +102,20 @@ docs/               Architecture decisions, engineering standards
 Arcana Semantic Graph (nodes, edges, regions, ports)
         │
         ▼
-   Compiler (topology-aware lowering)
+   Semantic Analysis (scope resolution, error recovery)
         │
         ▼
-   Bytecode (.mgc binary format)
+   HIR (expression trees, resolved variables, HIR_POISON)
+        │
+        ▼
+   MIR (basic blocks, temporaries, terminators)
+        │
+        ▼
+   Bytecode Emission (.mgc binary format)
         │
    ┌────┴────┐
    ▼         ▼
-Verifier    VM (stack-based execution)
+Verifier    VM (stack-based, mark-sweep GC)
 ```
 
 The **semantic graph** is the canonical compiler input. Nodes represent
@@ -108,16 +124,18 @@ boundaries. Cyclic port order on each node determines operand evaluation
 order — this is what makes the representation geometry-native rather than
 a conventional AST.
 
-The **compiler** walks the graph, resolves symbols, and emits bytecode with
-constant pool entries, function records, and optional debug metadata mapping
-bytecode ranges back to source element IDs.
+The **compiler** walks the graph, resolves symbols, lowers through HIR/MIR,
+and emits bytecode with constant pool entries, function records (including
+upvalue descriptors for closures), and debug metadata mapping bytecode ranges
+back to source element IDs.
 
 The **verifier** independently validates bytecode before execution: opcode
 validity, operand bounds, stack height consistency at control-flow join
-points, and termination (every function ends with halt or return).
+points, and termination.
 
-The **VM** is a stack machine with tagged values (null, bool, i64, f64,
-string), 256 call frames, and a 1024-slot operand stack.
+The **VM** is a stack machine with tagged values (null, bool, i64, f64, obj),
+256 call frames, a 1024-slot operand stack, and mark-sweep garbage collection.
+Six heap object types: string, array, map, closure, upvalue, record.
 
 The **reference interpreter** directly evaluates the semantic graph without
 compiling, used for differential testing against the compiler+VM pipeline.
@@ -128,9 +146,9 @@ compiling, used for differential testing against the compiler+VM pipeline.
 
 - Magic bytes: `ARCA`
 - Version: major.minor (currently 0.1)
-- Constant pool (tagged values)
-- Function table (arity, locals, stack depth, code offset, debug name)
-- Code section (27 opcodes)
+- Constant pool (tagged values with deduplication)
+- Function table (arity, locals, stack depth, code offset, upvalue descriptors)
+- Code section (41 opcodes)
 - Debug section (optional, bytecode offset → source element ID)
 
 All opcodes are defined once in `src/bytecode/opcodes.h` using an X-macro
@@ -139,25 +157,28 @@ single source of truth.
 
 ## Current status
 
-The v0 prototype is functional. The following milestones are complete:
+The prototype is feature-complete for v0 language semantics:
 
-- Bytecode vocabulary and binary format
-- Assembler, disassembler, verifier
-- Stack VM with tagged values
-- Semantic graph library and validator
-- Topology-aware lowering (containment, edges, cyclic port order)
-- Compiler pipeline (graph → bytecode)
-- Functions, calls, returns
-- Branching (if/else)
-- Loops and recursion
-- String values (refcounted)
-- Global variables
-- Structured diagnostics
-- Reference interpreter
-- CI on Linux, Windows, and macOS
+- 41 bytecode opcodes + 9 intrinsics
+- Arithmetic (i64/f64), comparisons, branching, loops, recursion
+- Functions, closures with Lua-style upvalues
+- Strings (immutable, concat, slice, index, len)
+- Arrays (dynamic, push/index/length) and maps (hash table, keys)
+- Records (named field structs)
+- Exception handling (try/catch/throw with frame unwinding)
+- Bitwise operations (and/or/xor/not/shift)
+- Type casts (cast_i64, cast_f64, cast_str)
+- Short-circuit booleans (and/or)
+- Mark-sweep garbage collector with stress mode
+- Type checker pass
+- Error recovery via HIR_POISON (multi-diagnostic reporting)
+- Structured diagnostics with stable ARC-XXX-NNNN codes
+- 123 tests across 10 per-module files, LOC enforcement via CTest
+- CI on Linux, Windows, macOS + sanitizers (all green)
 
-Not yet implemented: type system, closures, garbage collection, modules,
-generics, drawing editor, or any visual frontend.
+Not yet implemented: classes/objects, module/import system, drawing editor,
+visual frontend, topology-derived runtime semantics (parallel regions,
+reactive execution, effect boundaries).
 
 ## Contributing
 
@@ -172,11 +193,17 @@ Key rules:
 - **Single source of truth** — opcodes defined once; consumers derive.
 - **Stable element IDs** — every semantic element retains identity through
   the pipeline into debug metadata.
+- **LOC limits** — 600 lines per file, 60 lines per function, enforced by CI.
+- **Lower-away rule** — compile geometry away when it can be fully resolved
+  at compile time; give it a runtime primitive when it cannot.
 
 ## CI
 
-GitHub Actions runs on every push and pull request, building and testing
-on Ubuntu, Windows (MSVC), and macOS.
+GitHub Actions runs on every push and pull request:
+- Ubuntu (GCC)
+- Windows (MSVC)
+- macOS (Clang)
+- Sanitizers (ASan + UBSan)
 
 ## License
 
