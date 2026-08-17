@@ -9,6 +9,7 @@
 
 /* --- lower a literal constant node --- */
 static HirExpr* lower_literal(SemCtx* ctx, const ArcNode* n) {
+    (void)ctx;
     switch (n->kind) {
     case ARC_NODE_CONST_INT: {
         HirExpr* e = hir_expr_new(HIR_CONST_INT, n->source_id);
@@ -110,7 +111,7 @@ static HirExpr* lower_unary_op(SemCtx* ctx, ArcNodeId node_id,
 
 /* --- lower a variable reference --- */
 static HirExpr* lower_var_ref(SemCtx* ctx, ArcNodeId node_id, const ArcNode* n) {
-    int slot = scope_find(&ctx->scope, n->attr.name);
+    int slot = arc_scope_find(&ctx->scope, n->attr.name);
     if (slot < 0) {
         sem_error(ctx, ARC_ERR_UNDEFINED_VARIABLE, node_id, n->source_id,
                   "undefined variable '%s'", n->attr.name);

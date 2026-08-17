@@ -1,0 +1,31 @@
+---
+# Arcana .clang-tidy -- static analysis configuration
+#
+# Run: clang-tidy -p build src/**/*.c
+# Or via cmake: cmake -B build -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+
+Checks: >
+  -*,
+  bugprone-*,
+  -bugprone-easily-swappable-parameters,
+  -bugprone-switch-missing-default-case,
+  cert-*,
+  -cert-err33-c,
+  clang-analyzer-*,
+  misc-definitions-in-headers,
+  misc-redundant-expression,
+  misc-unused-using-decls,
+  performance-*,
+  readability-braces-around-statements,
+  readability-misleading-indentation,
+  readability-redundant-control-flow,
+
+WarningsAsErrors: >
+  bugprone-*,
+  clang-analyzer-*
+
+HeaderFilterRegex: 'src/.*\.h$'
+
+CheckOptions:
+  - key: readability-braces-around-statements.ShortStatementLines
+    value: '2'

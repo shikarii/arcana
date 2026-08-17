@@ -7,26 +7,8 @@
  */
 
 #include "semantic.h"
+#include "scope.h"
 #include <stdarg.h>
-
-/* ===================================================================
- * Scope stack — maps variable names to local slot indices.
- * =================================================================== */
-
-#define SEM_MAX_LOCALS 256
-#define SEM_MAX_SCOPES 64
-
-typedef struct {
-    const char* name;
-    uint16_t    slot;
-} SemLocal;
-
-typedef struct {
-    SemLocal locals[SEM_MAX_LOCALS];
-    uint16_t local_count;
-    uint16_t scope_starts[SEM_MAX_SCOPES];
-    uint16_t scope_depth;
-} SemScope;
 
 /* ===================================================================
  * Lowering context — carries mutable state through the walk.
@@ -36,19 +18,12 @@ typedef struct {
     const ArcGraph* graph;
     HirModule*      module;
     ArcDiagList*    diags;
-    SemScope        scope;
+    ArcScope        scope;
     bool            had_error;
 
     struct { const char* name; uint16_t idx; } func_table[256];
     uint16_t func_table_count;
 } SemCtx;
-
-/* --- Scope helpers --- */
-void    scope_init(SemScope* s);
-void    scope_push(SemScope* s);
-void    scope_pop(SemScope* s);
-int     scope_find(const SemScope* s, const char* name);
-uint16_t scope_add(SemScope* s, const char* name);
 
 /* --- Diagnostics --- */
 void sem_error(SemCtx* ctx, ArcDiagCode code,
