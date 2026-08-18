@@ -1,5 +1,7 @@
 # Experiment 2A: Geometric Containment — Findings
 
+> **Corrections applied:** Several claims in this document have been revised following adversarial review. See `consolidated-adversarial-assessment.md` and `experiment-2a-corrections-and-2b-lock.md` for the full correction record. Key changes: "measured 6× leverage" → "declared fan-out = 6, consumed fan-out pending"; deformation invariance reclassified from G3 → G4; spatial architecture downgraded to presentation; boundary ambiguity reframed as intrinsicness advantage, not impossibility claim.
+
 ## What This Document Is
 
 This documents the results of Experiment 2A, which tested the first geometric property in Arcana: deriving region membership from point-in-circle containment. Experiment 1 proved the architecture verifier works on explicitly declared regions. Experiment 2A asks: **can geometry replace those explicit declarations and still produce the same verification results?**
