@@ -1,0 +1,30 @@
+; Level 3.01: Valid sealed architecture — perception/planner pipeline
+; Two sealed process regions with declared capabilities and channel.
+; perception: reads clock, planner: pure computation
+; Expected: PASS (all effects covered by capabilities)
+region r0 module
+region r_percep function parent=r0
+region r_plan function parent=r0
+
+; Architecture declarations
+sealed r_percep
+sealed r_plan
+capability r_percep Clock
+channel r_percep -> r_plan
+
+; --- perception: reads clock, produces a value ---
+node p_clk intrinsic_call(1) in r_percep
+node p_c10 const_int(10) in r_percep
+node p_add add in r_percep
+edge e0 p_clk.out -> p_add.lhs
+edge e1 p_c10.out -> p_add.rhs
+
+; --- planner: pure computation ---
+node q_c1 const_int(1) in r_plan
+node q_c2 const_int(2) in r_plan
+node q_add add in r_plan
+edge e2 q_c1.out -> q_add.lhs
+edge e3 q_c2.out -> q_add.rhs
+
+; output from planner
+root q_add.out

@@ -57,12 +57,13 @@ add_library(arcana_vm STATIC src/vm/vm.c src/vm/vm_ops.c src/vm/vm_concurrency.c
 target_link_libraries(arcana_vm PUBLIC arcana_bytecode arcana_runtime)
 list(APPEND ARCANA_LIBS arcana_vm)
 
-add_library(arcana_verifier STATIC src/verifier/verifier.c)
-target_link_libraries(arcana_verifier PUBLIC arcana_bytecode)
+add_library(arcana_verifier STATIC src/verifier/verifier.c src/verifier/architecture.c)
+target_link_libraries(arcana_verifier PUBLIC arcana_bytecode arcana_semantic_graph)
 list(APPEND ARCANA_LIBS arcana_verifier)
 
 add_library(arcana_semantic_graph STATIC
-    src/semantic_graph/semantic_graph.c src/semantic_graph/fixture_parser.c)
+    src/semantic_graph/semantic_graph.c src/semantic_graph/fixture_parser.c
+    src/semantic_graph/fixture_kinds.c)
 target_include_directories(arcana_semantic_graph PUBLIC src)
 list(APPEND ARCANA_LIBS arcana_semantic_graph)
 
@@ -125,6 +126,7 @@ add_executable(arcana_tests
     tests/test_const_fold.c
     tests/test_concurrency.c
     tests/test_challenge_L2.c
+    tests/test_architecture.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode
@@ -166,7 +168,7 @@ target_link_libraries(arcana-compile
 # --- Benchmark (optional, not part of test suite) ---
 add_executable(arcana-bench benchmarks/bench_compile.c)
 target_link_libraries(arcana-bench
-    arcana_semantic_graph arcana_compiler arcana_bytecode
+    arcana_semantic_graph arcana_compiler arcana_bytecode arcana_verifier
 )
 
 enable_testing()

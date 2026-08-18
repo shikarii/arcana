@@ -1,0 +1,20 @@
+; Level 3.06: Pure internal helpers — sealed region with only pure computation
+; Sealed region does arithmetic, no effects needed. No capabilities declared.
+; Expected: PASS
+region r0 module
+region r_comp function parent=r0
+
+sealed r_comp
+
+; pure computation: (3 + 4) * 2 = 14
+node c3 const_int(3) in r_comp
+node c4 const_int(4) in r_comp
+node a1 add in r_comp
+edge e0 c3.out -> a1.lhs
+edge e1 c4.out -> a1.rhs
+node c2 const_int(2) in r_comp
+node m1 mul in r_comp
+edge e2 a1.out -> m1.lhs
+edge e3 c2.out -> m1.rhs
+
+root m1.out

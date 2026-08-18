@@ -1,12 +1,7 @@
 #include "fixture_parser.h"
+#include "fixture_kinds.h"
 #include <stdarg.h>
 #include <ctype.h>
-
-#ifdef _MSC_VER
-#define arc_strdup _strdup
-#else
-#define arc_strdup strdup
-#endif
 
 /* --- Internal parse state --- */
 
@@ -21,8 +16,10 @@ typedef struct {
     uint32_t port_count;
 
     ArcGraph* graph;
+    ArcArchSpec* arch;
     char error[256];
     bool had_error;
+    bool has_arch;
 } ParseState;
 
 static void perr(ParseState* s, const char* fmt, ...) {
@@ -75,78 +72,7 @@ static const char* read_token(const char* p, char* buf, size_t bufsz) {
     return p;
 }
 
-static ArcRegionKind parse_region_kind(const char* s) {
-    if (strcmp(s, "module") == 0 || strcmp(s, "scope") == 0) return ARC_REGION_MODULE;
-    if (strcmp(s, "function") == 0) return ARC_REGION_FUNCTION;
-    if (strcmp(s, "block") == 0) return ARC_REGION_BLOCK;
-    if (strcmp(s, "then") == 0) return ARC_REGION_THEN;
-    if (strcmp(s, "else") == 0) return ARC_REGION_ELSE;
-    if (strcmp(s, "loop_body") == 0) return ARC_REGION_LOOP_BODY;
-    if (strcmp(s, "cycle") == 0) return ARC_REGION_CYCLE;
-    return ARC_REGION_MODULE;
-}
-
-/* Table-driven node kind lookup */
-static const struct { const char* name; ArcNodeKind kind; } kind_table[] = {
-    {"const_int",ARC_NODE_CONST_INT}, {"const_float",ARC_NODE_CONST_FLOAT},
-    {"const_bool",ARC_NODE_CONST_BOOL}, {"const_null",ARC_NODE_CONST_NULL},
-    {"const_string",ARC_NODE_CONST_STRING},
-    {"add",ARC_NODE_ADD}, {"sub",ARC_NODE_SUB}, {"mul",ARC_NODE_MUL},
-    {"div",ARC_NODE_DIV}, {"mod",ARC_NODE_MOD}, {"neg",ARC_NODE_NEG},
-    {"eq",ARC_NODE_EQ}, {"neq",ARC_NODE_NEQ}, {"lt",ARC_NODE_LT},
-    {"le",ARC_NODE_LE}, {"gt",ARC_NODE_GT}, {"ge",ARC_NODE_GE},
-    {"not",ARC_NODE_NOT}, {"and",ARC_NODE_AND}, {"or",ARC_NODE_OR},
-    {"if",ARC_NODE_IF}, {"while",ARC_NODE_WHILE},
-    {"let",ARC_NODE_LET}, {"var_ref",ARC_NODE_VAR_REF}, {"assign",ARC_NODE_ASSIGN},
-    {"func_def",ARC_NODE_FUNC_DEF}, {"func_call",ARC_NODE_FUNC_CALL},
-    {"param",ARC_NODE_PARAM}, {"return",ARC_NODE_RETURN},
-    {"print",ARC_NODE_PRINT}, {"root_output",ARC_NODE_ROOT_OUTPUT},
-    {"sequence",ARC_NODE_SEQUENCE}, {"cycle",ARC_NODE_CYCLE}, {"break_if",ARC_NODE_BREAK_IF},
-    {"bit_and",ARC_NODE_BIT_AND}, {"bit_or",ARC_NODE_BIT_OR},
-    {"bit_xor",ARC_NODE_BIT_XOR}, {"bit_not",ARC_NODE_BIT_NOT},
-    {"shl",ARC_NODE_SHL}, {"shr",ARC_NODE_SHR},
-    {"cast_i64",ARC_NODE_CAST_I64}, {"cast_f64",ARC_NODE_CAST_F64},
-    {"cast_str",ARC_NODE_CAST_STR},
-    {"array_literal",ARC_NODE_ARRAY_LITERAL}, {"map_literal",ARC_NODE_MAP_LITERAL},
-    {"index_get",ARC_NODE_INDEX_GET}, {"index_set",ARC_NODE_INDEX_SET},
-    {"str_len",ARC_NODE_STR_LEN}, {"str_slice",ARC_NODE_STR_SLICE},
-    {"str_index",ARC_NODE_STR_INDEX}, {"length",ARC_NODE_LENGTH},
-    {"try",ARC_NODE_TRY}, {"throw",ARC_NODE_THROW},
-    {"closure",ARC_NODE_CLOSURE}, {"intrinsic_call",ARC_NODE_INTRINSIC_CALL},
-    {"record_new",ARC_NODE_RECORD_NEW}, {"field_get",ARC_NODE_FIELD_GET},
-    {"field_set",ARC_NODE_FIELD_SET},
-    {"thread_spawn",ARC_NODE_THREAD_SPAWN}, {"thread_join",ARC_NODE_THREAD_JOIN},
-    {"mutex_new",ARC_NODE_MUTEX_NEW}, {"mutex_lock",ARC_NODE_MUTEX_LOCK},
-    {"mutex_unlock",ARC_NODE_MUTEX_UNLOCK}, {"chan_new",ARC_NODE_CHAN_NEW},
-    {"chan_send",ARC_NODE_CHAN_SEND}, {"chan_recv",ARC_NODE_CHAN_RECV},
-    {NULL, ARC_NODE_CONST_NULL}
-};
-
-static ArcNodeKind lookup_kind(const char* name) {
-    for (int i = 0; kind_table[i].name; i++)
-        if (strcmp(kind_table[i].name, name) == 0) return kind_table[i].kind;
-    return ARC_NODE_CONST_NULL;
-}
-
-static ArcNodeKind parse_node_kind(const char* s, char* attr_buf, size_t attr_sz) {
-    attr_buf[0] = '\0';
-    const char* paren = strchr(s, '(');
-    char kind[64] = {0};
-    if (paren) {
-        size_t klen = (size_t)(paren - s);
-        if (klen >= sizeof(kind)) klen = sizeof(kind) - 1;
-        memcpy(kind, s, klen); kind[klen] = '\0';
-        const char* end = strchr(paren + 1, ')');
-        if (end) {
-            size_t alen = (size_t)(end - paren - 1);
-            if (alen >= attr_sz) alen = attr_sz - 1;
-            memcpy(attr_buf, paren + 1, alen); attr_buf[alen] = '\0';
-        }
-    } else {
-        snprintf(kind, sizeof(kind), "%s", s);
-    }
-    return lookup_kind(kind);
-}
+/* Kind table and node attr parsing extracted to fixture_kinds.c */
 
 /* --- Add default output-only port --- */
 static void add_output_port(ParseState* s, const char* node_name, ArcNodeId nid) {
@@ -349,7 +275,7 @@ static void parse_cmd_region(ParseState* s, const char* line) {
     line = read_token(line, name, sizeof(name));
     line = read_token(line, kind_str, sizeof(kind_str));
 
-    ArcRegionKind kind = parse_region_kind(kind_str);
+    ArcRegionKind kind = arc_fk_region_kind(kind_str);
     ArcRegionId parent = ARC_INVALID_ID;
 
     line = skip_ws(line);
@@ -365,42 +291,7 @@ static void parse_cmd_region(ParseState* s, const char* line) {
     s->region_count++;
 }
 
-/* --- Set node attribute from kind and attr_buf --- */
-static void set_node_attr(ArcNode* n, ArcNodeKind kind, const char* attr_buf) {
-    switch (kind) {
-    case ARC_NODE_CONST_INT: n->attr.int_value = atoll(attr_buf); break;
-    case ARC_NODE_CONST_FLOAT: n->attr.float_value = atof(attr_buf); break;
-    case ARC_NODE_CONST_BOOL: n->attr.bool_value = (strcmp(attr_buf, "true") == 0); break;
-    case ARC_NODE_LET: case ARC_NODE_VAR_REF: case ARC_NODE_ASSIGN:
-    case ARC_NODE_PARAM:
-        n->attr.name = arc_strdup(attr_buf); break;
-    case ARC_NODE_IF:
-        n->attr.branch.then_region = ARC_INVALID_ID;
-        n->attr.branch.else_region = ARC_INVALID_ID;
-        break;
-    case ARC_NODE_FUNC_DEF:
-        n->attr.func.name = arc_strdup(attr_buf);
-        n->attr.func.arity = 0;
-        n->attr.func.body_region = ARC_INVALID_ID;
-        break;
-    case ARC_NODE_FUNC_CALL: case ARC_NODE_THREAD_SPAWN:
-    case ARC_NODE_RECORD_NEW: case ARC_NODE_FIELD_GET: case ARC_NODE_FIELD_SET:
-        n->attr.name = arc_strdup(attr_buf); break;
-    case ARC_NODE_CHAN_NEW:
-        n->attr.collection.count = attr_buf[0] ? (uint16_t)atoi(attr_buf) : 1; break;
-    case ARC_NODE_CONST_STRING:
-        n->attr.string_value.data = arc_strdup(attr_buf);
-        n->attr.string_value.len = (uint32_t)strlen(attr_buf); break;
-    case ARC_NODE_ARRAY_LITERAL: case ARC_NODE_MAP_LITERAL:
-        n->attr.collection.count = attr_buf[0] ? (uint16_t)atoi(attr_buf) : 0; break;
-    case ARC_NODE_INTRINSIC_CALL:
-        n->attr.intrinsic.id = attr_buf[0] ? (uint16_t)atoi(attr_buf) : 0; break;
-    case ARC_NODE_TRY:
-        n->attr.try_catch.try_region = ARC_INVALID_ID;
-        n->attr.try_catch.catch_region = ARC_INVALID_ID; break;
-    default: break;
-    }
-}
+/* set_node_attr extracted to fixture_kinds.c */
 
 /* --- Parse "node" command --- */
 static void parse_cmd_node(ParseState* s, const char* line) {
@@ -409,7 +300,7 @@ static void parse_cmd_node(ParseState* s, const char* line) {
     line = read_token(line, kind_str, sizeof(kind_str));
 
     char attr_buf[64];
-    ArcNodeKind kind = parse_node_kind(kind_str, attr_buf, sizeof(attr_buf));
+    ArcNodeKind kind = arc_fk_parse_node_kind(kind_str, attr_buf, sizeof(attr_buf));
 
     char in_kw[16], region_name[32] = {0};
     line = read_token(line, in_kw, sizeof(in_kw));
@@ -421,7 +312,7 @@ static void parse_cmd_node(ParseState* s, const char* line) {
 
     ArcNodeId nid = arc_graph_add_node(s->graph, kind, rid, 0);
     ArcNode* n = arc_graph_node(s->graph, nid);
-    set_node_attr(n, kind, attr_buf);
+    arc_fk_set_node_attr(n, kind, attr_buf);
 
     snprintf(s->nodes[s->node_count].name, 32, "%s", name);
     s->nodes[s->node_count].id = nid;
@@ -497,6 +388,45 @@ static void parse_cmd_root(ParseState* s, const char* line) {
     }
 }
 
+/* --- Architecture commands: sealed / capability / channel --- */
+
+static ArcArchRegionSpec* find_arch_region(ArcArchSpec* a, ArcRegionId rid) {
+    for (uint32_t i = 0; i < a->region_count; i++)
+        if (a->regions[i].region == rid) return &a->regions[i];
+    return NULL;
+}
+
+static void parse_cmd_sealed(ParseState* s, const char* line) {
+    char rname[32]; read_token(line, rname, sizeof(rname));
+    ArcRegionId rid = find_region(s, rname);
+    if (rid == ARC_INVALID_ID) { perr(s, "sealed: unknown region '%s'", rname); return; }
+    ArcArchRegionSpec* rs = find_arch_region(s->arch, rid);
+    if (rs) { rs->sealed = true; return; }
+    arc_arch_spec_add_sealed(s->arch, rid, ARC_EFFECT_PURE);
+}
+
+static void parse_cmd_capability(ParseState* s, const char* line) {
+    char rname[32], ename[32];
+    line = read_token(line, rname, sizeof(rname)); read_token(line, ename, sizeof(ename));
+    ArcRegionId rid = find_region(s, rname);
+    if (rid == ARC_INVALID_ID) { perr(s, "capability: unknown region '%s'", rname); return; }
+    ArcEffectSet eff = arc_effect_parse(ename);
+    if (eff == 0) { perr(s, "capability: unknown effect '%s'", ename); return; }
+    ArcArchRegionSpec* rs = find_arch_region(s->arch, rid);
+    if (rs) { rs->capabilities |= eff; return; }
+    arc_arch_spec_add_sealed(s->arch, rid, eff);
+}
+
+static void parse_cmd_channel(ParseState* s, const char* line) {
+    char fn[32], arrow[16], tn[32];
+    line = read_token(line, fn, sizeof(fn));
+    line = read_token(line, arrow, sizeof(arrow)); read_token(line, tn, sizeof(tn));
+    ArcRegionId from = find_region(s, fn), to = find_region(s, tn);
+    if (from == ARC_INVALID_ID) { perr(s, "channel: unknown region '%s'", fn); return; }
+    if (to == ARC_INVALID_ID) { perr(s, "channel: unknown region '%s'", tn); return; }
+    arc_arch_spec_add_channel(s->arch, from, to);
+}
+
 static void parse_line(ParseState* s, const char* line) {
     if (s->had_error) return;
     line = skip_ws(line);
@@ -505,11 +435,14 @@ static void parse_line(ParseState* s, const char* line) {
     char cmd[32];
     line = read_token(line, cmd, sizeof(cmd));
 
-    if (strcmp(cmd, "region") == 0)      parse_cmd_region(s, line);
-    else if (strcmp(cmd, "node") == 0)   parse_cmd_node(s, line);
-    else if (strcmp(cmd, "edge") == 0)   parse_cmd_edge(s, line);
-    else if (strcmp(cmd, "root") == 0)   parse_cmd_root(s, line);
-    else                                 perr(s, "unknown command '%s'", cmd);
+    if (strcmp(cmd, "region") == 0)          parse_cmd_region(s, line);
+    else if (strcmp(cmd, "node") == 0)       parse_cmd_node(s, line);
+    else if (strcmp(cmd, "edge") == 0)       parse_cmd_edge(s, line);
+    else if (strcmp(cmd, "root") == 0)       parse_cmd_root(s, line);
+    else if (strcmp(cmd, "sealed") == 0)     { parse_cmd_sealed(s, line); s->has_arch = true; }
+    else if (strcmp(cmd, "capability") == 0) { parse_cmd_capability(s, line); s->has_arch = true; }
+    else if (strcmp(cmd, "channel") == 0)    { parse_cmd_channel(s, line); s->has_arch = true; }
+    else                                     perr(s, "unknown command '%s'", cmd);
 }
 
 ArcFixtureResult arc_fixture_parse(const char* text) {
@@ -519,9 +452,11 @@ ArcFixtureResult arc_fixture_parse(const char* text) {
 
     arc_graph_init(&result.graph);
     result.graph.owns_strings = true;
+    arc_arch_spec_init(&result.arch);
 
     ParseState state = {0};
     state.graph = &result.graph;
+    state.arch = &result.arch;
 
     const char* p = text;
     while (*p) {
@@ -541,6 +476,7 @@ ArcFixtureResult arc_fixture_parse(const char* text) {
         }
     }
 
+    result.has_arch = state.has_arch;
     return result;
 }
 

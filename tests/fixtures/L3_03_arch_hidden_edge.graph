@@ -1,0 +1,20 @@
+; Level 3.03: Hidden cross-boundary edge — undeclared dependency between sealed regions
+; perception and planner are sealed, but there's a direct edge with no channel declared
+; Expected: FAIL — "undeclared dependency crosses sealed boundary"
+region r0 module
+region r_percep function parent=r0
+region r_plan function parent=r0
+
+sealed r_percep
+sealed r_plan
+
+; perception produces a value
+node p_c42 const_int(42) in r_percep
+
+; planner consumes it directly — no channel declared!
+node q_c1 const_int(1) in r_plan
+node q_add add in r_plan
+edge e0 p_c42.out -> q_add.lhs
+edge e1 q_c1.out -> q_add.rhs
+
+root q_add.out
