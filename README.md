@@ -6,10 +6,12 @@ text. The compiler operates on discrete topological facts (nodes, directed
 edges, region containment, cyclic port order) and lowers them through a
 standard pipeline to stack-based bytecode executed by a small VM.
 
-This is an early-stage project. The v0 prototype implements a compiler,
-bytecode VM, verifier, reference interpreter, and CLI toolchain in C17.
-It can compile and run programs with functions, branching, loops, and
-recursion (`fib(10) == 55`).
+The v0 prototype implements a compiler, bytecode VM (66 opcodes),
+mark-sweep GC, verifier, reference interpreter, type checker, and CLI
+toolchain in C17. It supports functions, closures, branching, loops,
+recursion, arrays, maps, records, exception handling, coroutines,
+threads, mutexes, and channels — 192 tests across three challenge
+corpus levels (L0 machine sanity, L1 algorithms, L2 concurrency).
 
 | Resource              | Link                                           |
 |-----------------------|------------------------------------------------|
@@ -48,9 +50,9 @@ cmake --build build
 ctest --test-dir build -V
 ```
 
-The test suite covers bytecode encoding, VM execution, semantic graph
-validation, compiler passes, and end-to-end programs. There are currently
-46 tests.
+192 tests covering bytecode encoding, VM execution, semantic graph
+validation, compiler passes, GC, closures, concurrency, and end-to-end
+programs across three challenge corpus levels.
 
 ## CLI tools
 
@@ -76,13 +78,18 @@ Example:
 src/
   common/           Typed IDs, result types, memory helpers
   semantic_graph/   Topology-aware program graph, validation, fixture parser
-  compiler/         Semantic graph → bytecode compilation, diagnostics
-  bytecode/         Opcode definitions, .mgc binary format, disassembler
-  vm/               Stack-based VM, tagged values, call frames
+  semantic/         HIR/MIR lowering and semantic analysis
+  compiler/         Semantic graph → bytecode compilation, constant folding
+  bytecode/         Opcode definitions (X-macro), .mgc binary format, disassembler
+  vm/               Stack-based VM, tagged values, call frames, concurrency
+  runtime/          Object model, mark-sweep GC, concurrency primitives
+  platform/         Cross-platform threading (pthreads / Win32)
   verifier/         Independent bytecode verification
   interpreter/      Reference interpreter (direct graph evaluation)
+  typecheck/        Static type checking
+  service/          Tooling API (parse → compile → verify → run)
 tools/              CLI tool sources
-tests/              Test suite and fixtures
+tests/              Test suite, fixtures, L0/L1/L2 challenge corpus
 docs/               Architecture decisions, engineering standards
 ```
 
@@ -117,7 +124,10 @@ validity, operand bounds, stack height consistency at control-flow join
 points, and termination (every function ends with halt or return).
 
 The **VM** is a stack machine with tagged values (null, bool, i64, f64,
-string), 256 call frames, and a 1024-slot operand stack.
+obj), 256 call frames, and a 1024-slot operand stack. Heap objects
+(strings, arrays, maps, closures, records, coroutines, threads, mutexes,
+channels) are managed by a mark-sweep garbage collector with thread-safe
+allocation.
 
 The **reference interpreter** directly evaluates the semantic graph without
 compiling, used for differential testing against the compiler+VM pipeline.
@@ -130,7 +140,7 @@ compiling, used for differential testing against the compiler+VM pipeline.
 - Version: major.minor (currently 0.1)
 - Constant pool (tagged values)
 - Function table (arity, locals, stack depth, code offset, debug name)
-- Code section (27 opcodes)
+- Code section (66 opcodes)
 - Debug section (optional, bytecode offset → source element ID)
 
 All opcodes are defined once in `src/bytecode/opcodes.h` using an X-macro
@@ -139,25 +149,31 @@ single source of truth.
 
 ## Current status
 
-The v0 prototype is functional. The following milestones are complete:
+The v0 prototype is feature-complete for its target scope. Complete:
 
-- Bytecode vocabulary and binary format
+- 66-opcode bytecode vocabulary and `.mgc` binary format
 - Assembler, disassembler, verifier
-- Stack VM with tagged values
-- Semantic graph library and validator
+- Stack VM with tagged values and mark-sweep GC
+- Semantic graph library, validator, HIR/MIR lowering
 - Topology-aware lowering (containment, edges, cyclic port order)
-- Compiler pipeline (graph → bytecode)
-- Functions, calls, returns
-- Branching (if/else)
-- Loops and recursion
-- String values (refcounted)
-- Global variables
-- Structured diagnostics
-- Reference interpreter
+- Compiler pipeline with constant folding and short-circuit evaluation
+- Functions, closures (Lua-style upvalues), calls, returns
+- Branching (if/else), loops, recursion, topology-derived cycles
+- Strings, arrays, maps, records
+- Type casts (i64, f64, string), bitwise operations
+- Exception handling (try/catch/throw)
+- Coroutines (cooperative multitasking)
+- OS threads, mutexes, channels (preemptive concurrency)
+- 9 intrinsics (print, clock, type, assert, tostring, input, len, push, keys)
+- Static type checker
+- Tooling service API
+- Structured diagnostics with stable error codes
+- Reference interpreter for differential testing
+- Three-level challenge corpus (L0/L1/L2): 36 fixture-based tests
 - CI on Linux, Windows, and macOS
 
-Not yet implemented: type system, closures, garbage collection, modules,
-generics, drawing editor, or any visual frontend.
+Not yet implemented: modules, generics, drawing editor, or any visual
+frontend.
 
 ## Contributing
 
