@@ -1,0 +1,15 @@
+; Level 4.03: Boundary ambiguity — node exactly on circle boundary
+; Node at distance ~50 from center (within epsilon=2 of radius=50).
+; Expected: FAIL — ambiguity rejection
+region r0 module
+region r_plan function parent=r0
+
+node n_c1 const_int(42) in r0
+
+; Circle at (100, 100) radius 50
+circle r_plan 100 100 50
+
+; Node at (150, 100) — exactly on boundary (distance = 50 = radius)
+position n_c1 150 100
+
+root n_c1.out

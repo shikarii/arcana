@@ -63,8 +63,9 @@ list(APPEND ARCANA_LIBS arcana_verifier)
 
 add_library(arcana_semantic_graph STATIC
     src/semantic_graph/semantic_graph.c src/semantic_graph/fixture_parser.c
-    src/semantic_graph/fixture_kinds.c)
+    src/semantic_graph/fixture_kinds.c src/geometry/containment.c)
 target_include_directories(arcana_semantic_graph PUBLIC src)
+target_link_libraries(arcana_semantic_graph PUBLIC $<$<NOT:$<BOOL:${WIN32}>>:m>)
 list(APPEND ARCANA_LIBS arcana_semantic_graph)
 
 add_library(arcana_hir STATIC src/hir/hir.c)
@@ -127,6 +128,7 @@ add_executable(arcana_tests
     tests/test_concurrency.c
     tests/test_challenge_L2.c
     tests/test_architecture.c
+    tests/test_containment.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode

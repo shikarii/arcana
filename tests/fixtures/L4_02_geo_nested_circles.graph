@@ -1,0 +1,27 @@
+; Level 4.02: Nested circles — node inside inner circle gets inner region
+; Root circle (200 radius) contains Perception circle (60 radius).
+; A node at (100, 100) is inside both. Should get Perception (smallest).
+; Expected: PASS — innermost circle wins
+region r0 module
+region r_root block parent=r0
+region r_percep function parent=r_root
+
+; Nodes in r0 initially
+node n_clk intrinsic_call(1) in r0
+node n_c10 const_int(10) in r0
+node n_fuse add in r0
+edge e0 n_clk.out -> n_fuse.lhs
+edge e1 n_c10.out -> n_fuse.rhs
+
+; Outer circle (r_root) at (200, 200) radius 200
+circle r_root 200 200 200
+
+; Inner circle (r_percep) at (100, 100) radius 60
+circle r_percep 100 100 60
+
+; Nodes positioned inside inner circle
+position n_clk 90 80
+position n_c10 110 90
+position n_fuse 100 110
+
+root n_fuse.out
