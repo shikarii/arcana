@@ -41,11 +41,10 @@ static void build_sensor_graph(ArcGraph* g, ArcNodeId nodes[4],
     }
 
     /* Fusion node in parent region (add_node auto-adds to region) */
+    static const char* arg_roles[] = {"arg0", "arg1", "arg2", "arg3"};
     ArcNodeId fusion = arc_graph_add_node(g, ARC_NODE_FUNC_CALL, r0, 10);
     for (int i = 0; i < 4; i++) {
-        char role[8];
-        snprintf(role, sizeof(role), "arg%d", i);
-        ArcPortId inp = arc_graph_add_port(g, fusion, ARC_PORT_INPUT, role);
+        ArcPortId inp = arc_graph_add_port(g, fusion, ARC_PORT_INPUT, arg_roles[i]);
         /* Edge from Si.out → fusion.argI */
         ArcPortId si_out = g->nodes[nodes[i]].ports[0];
         arc_graph_add_edge(g, si_out, inp);
