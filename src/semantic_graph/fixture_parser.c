@@ -17,9 +17,11 @@ typedef struct {
 
     ArcGraph* graph;
     ArcArchSpec* arch;
+    ArcGeoLayout* geo;
     char error[256];
     bool had_error;
     bool has_arch;
+    bool has_geo;
 } ParseState;
 
 static void perr(ParseState* s, const char* fmt, ...) {
@@ -427,6 +429,29 @@ static void parse_cmd_channel(ParseState* s, const char* line) {
     arc_arch_spec_add_channel(s->arch, from, to);
 }
 
+/* --- Geometry commands: circle / position (Experiment 2A) --- */
+
+static void parse_cmd_circle(ParseState* s, const char* line) {
+    char rname[32], cx_s[32], cy_s[32], r_s[32];
+    line = read_token(line, rname, sizeof(rname));
+    line = read_token(line, cx_s, sizeof(cx_s));
+    line = read_token(line, cy_s, sizeof(cy_s));
+    read_token(line, r_s, sizeof(r_s));
+    ArcRegionId rid = find_region(s, rname);
+    if (rid == ARC_INVALID_ID) { perr(s, "circle: unknown region '%s'", rname); return; }
+    arc_geo_add_circle(s->geo, rid, atof(cx_s), atof(cy_s), atof(r_s));
+}
+
+static void parse_cmd_position(ParseState* s, const char* line) {
+    char nname[32], x_s[32], y_s[32];
+    line = read_token(line, nname, sizeof(nname));
+    line = read_token(line, x_s, sizeof(x_s));
+    read_token(line, y_s, sizeof(y_s));
+    ArcNodeId nid = find_node(s, nname);
+    if (nid == ARC_INVALID_ID) { perr(s, "position: unknown node '%s'", nname); return; }
+    arc_geo_add_position(s->geo, nid, atof(x_s), atof(y_s));
+}
+
 static void parse_line(ParseState* s, const char* line) {
     if (s->had_error) return;
     line = skip_ws(line);
@@ -442,6 +467,8 @@ static void parse_line(ParseState* s, const char* line) {
     else if (strcmp(cmd, "sealed") == 0)     { parse_cmd_sealed(s, line); s->has_arch = true; }
     else if (strcmp(cmd, "capability") == 0) { parse_cmd_capability(s, line); s->has_arch = true; }
     else if (strcmp(cmd, "channel") == 0)    { parse_cmd_channel(s, line); s->has_arch = true; }
+    else if (strcmp(cmd, "circle") == 0)     { parse_cmd_circle(s, line); s->has_geo = true; }
+    else if (strcmp(cmd, "position") == 0)   { parse_cmd_position(s, line); s->has_geo = true; }
     else                                     perr(s, "unknown command '%s'", cmd);
 }
 
@@ -453,10 +480,12 @@ ArcFixtureResult arc_fixture_parse(const char* text) {
     arc_graph_init(&result.graph);
     result.graph.owns_strings = true;
     arc_arch_spec_init(&result.arch);
+    arc_geo_init(&result.geo);
 
     ParseState state = {0};
     state.graph = &result.graph;
     state.arch = &result.arch;
+    state.geo = &result.geo;
 
     const char* p = text;
     while (*p) {
@@ -477,6 +506,7 @@ ArcFixtureResult arc_fixture_parse(const char* text) {
     }
 
     result.has_arch = state.has_arch;
+    result.has_geo = state.has_geo;
     return result;
 }
 

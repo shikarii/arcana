@@ -1,0 +1,70 @@
+; Level 4.05: Geometric pipeline — same as L4_04 but with Logger capability
+; Planner is sealed WITH Logger capability declared.
+; Expected: PASS — verifier accepts because capability covers the transitive effect
+
+region r0 module
+region r_percep function parent=r0
+region r_plan function parent=r0
+region r_ctrl function parent=r0
+region r_sub function parent=r0
+
+; --- Top-level nodes ---
+node cam0 const_int(1) in r0
+node cam1 add in r0
+node actuator print in r0
+
+; --- Perception ---
+node preproc add in r0
+node fusion mul in r0
+
+; --- Planner ---
+node helper func_call(sub_helper) in r0
+node route add in r0
+
+; --- sub_helper: calls print (Logger) ---
+node sub_def func_def(sub_helper) in r0 body_region=r_sub arity=1
+node sub_param param(x) in r_sub ports=[out]
+node sub_print print in r_sub
+edge e_sub0 sub_param.out -> sub_print.value
+node sub_ret return in r_sub
+node sub_c0 const_int(0) in r_sub
+edge e_sub1 sub_c0.out -> sub_ret.value
+
+; --- Controller ---
+node control add in r0
+
+; --- Data flow ---
+edge e0 cam0.out -> cam1.lhs
+node cam1b const_int(2) in r0
+edge e1 cam1b.out -> cam1.rhs
+edge e2 cam1.out -> preproc.lhs
+node pp_k const_int(3) in r0
+edge e3 pp_k.out -> preproc.rhs
+edge e4 preproc.out -> fusion.lhs
+node fuse_k const_int(4) in r0
+edge e5 fuse_k.out -> fusion.rhs
+edge e6 fusion.out -> helper.arg0
+edge e7 fusion.out -> route.lhs
+node route_k const_int(5) in r0
+edge e8 route_k.out -> route.rhs
+edge e9 route.out -> control.lhs
+node ctrl_k const_int(6) in r0
+edge e10 ctrl_k.out -> control.rhs
+edge e11 control.out -> actuator.value
+
+; --- Architecture: seal Planner WITH Logger capability ---
+sealed r_plan
+capability r_plan Logger
+
+; --- Geometry: same layout as L4_04 ---
+circle r_percep 200 300 120
+circle r_plan 500 300 120
+circle r_ctrl 800 300 100
+
+position preproc 180 280
+position fusion 220 320
+position helper 480 280
+position route 520 320
+position control 800 300
+
+root route.out

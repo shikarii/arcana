@@ -3,9 +3,10 @@
 
 #include "semantic_graph.h"
 #include "../verifier/architecture.h"
+#include "../geometry/containment.h"
 
 /*
- * Parse a text fixture into an ArcGraph + optional architecture spec.
+ * Parse a text fixture into an ArcGraph + optional architecture spec + geometry.
  *
  * Format:
  *   region <id> <kind> [parent=<id>]
@@ -17,14 +18,20 @@
  *   sealed <region_id>
  *   capability <region_id> <effect_name>
  *   channel <region_id> -> <region_id>
+ *
+ * Geometry extensions (Experiment 2A):
+ *   circle <region_name> <cx> <cy> <radius>
+ *   position <node_name> <x> <y>
  */
 
 typedef struct {
-    ArcGraph    graph;
-    ArcArchSpec arch;
-    char        error[256];
-    bool        success;
-    bool        has_arch;    /* true if any sealed/capability/channel commands present */
+    ArcGraph      graph;
+    ArcArchSpec   arch;
+    ArcGeoLayout  geo;
+    char          error[256];
+    bool          success;
+    bool          has_arch;    /* true if any sealed/capability/channel commands present */
+    bool          has_geo;     /* true if any circle/position commands present */
 } ArcFixtureResult;
 
 /* Parse fixture text (null-terminated) into a graph */

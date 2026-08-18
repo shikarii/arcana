@@ -1,0 +1,23 @@
+; Level 4.01: Basic geometric containment — single circle, node inside
+; Membership derived from inside(x, R), no explicit region declaration needed.
+; Nodes start in r0, geometry reassigns them to r_plan.
+; Expected: PASS — node moves to r_plan via geometry
+region r0 module
+region r_plan function parent=r0
+
+; Nodes declared in r0 (will be reassigned by geometry)
+node n_c1 const_int(1) in r0
+node n_c2 const_int(2) in r0
+node n_add add in r0
+edge e0 n_c1.out -> n_add.lhs
+edge e1 n_c2.out -> n_add.rhs
+
+; Geometry: circle at (100, 100) radius 50 defines r_plan
+circle r_plan 100 100 50
+
+; All three nodes positioned inside the circle
+position n_c1 80 90
+position n_c2 110 105
+position n_add 100 110
+
+root n_add.out

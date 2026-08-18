@@ -77,79 +77,52 @@ extern void test_gc_stress(void);
 extern void test_gc_stress_mode(void);
 
 /* --- test_graph.c --- */
-extern void test_graph_valid(void);
-extern void test_graph_invalid_edge(void);
+extern void test_graph_valid(void); extern void test_graph_invalid_edge(void);
 extern void test_graph_validation_bidirectional_port(void);
-extern void test_hir_construct_and_dump(void);
-extern void test_hir_function_with_params(void);
-extern void test_hir_validation_valid(void);
-extern void test_hir_validation_null_expr(void);
-extern void test_mir_construct_and_dump(void);
-extern void test_mir_branching(void);
+extern void test_hir_construct_and_dump(void); extern void test_hir_function_with_params(void);
+extern void test_hir_validation_valid(void); extern void test_hir_validation_null_expr(void);
+extern void test_mir_construct_and_dump(void); extern void test_mir_branching(void);
 extern void test_mir_validation_missing_terminator(void);
-extern void test_semantic_5_plus_10(void);
-extern void test_semantic_undefined_variable(void);
-extern void test_semantic_null_graph(void);
-extern void test_semantic_function_lowering(void);
+extern void test_semantic_5_plus_10(void); extern void test_semantic_undefined_variable(void);
+extern void test_semantic_null_graph(void); extern void test_semantic_function_lowering(void);
 
 /* --- test_pipeline.c --- */
-extern void test_e2e_5_plus_10(void);
-extern void test_e2e_5_plus_10_vm_result(void);
-extern void test_compile_fail_diagnostic(void);
-extern void test_golden_disassembly(void);
-extern void test_compiler_short_circuit_and(void);
-extern void test_compiler_short_circuit_and_false(void);
-extern void test_compiler_short_circuit_or(void);
-extern void test_compiler_const_string(void);
-extern void test_compiler_bitwise_and(void);
-extern void test_compiler_cast_i64(void);
-extern void test_compiler_str_len(void);
-extern void test_compiler_try_throw(void);
+extern void test_e2e_5_plus_10(void); extern void test_e2e_5_plus_10_vm_result(void);
+extern void test_compile_fail_diagnostic(void); extern void test_golden_disassembly(void);
+extern void test_compiler_short_circuit_and(void); extern void test_compiler_short_circuit_and_false(void);
+extern void test_compiler_short_circuit_or(void); extern void test_compiler_const_string(void);
+extern void test_compiler_bitwise_and(void); extern void test_compiler_cast_i64(void);
+extern void test_compiler_str_len(void); extern void test_compiler_try_throw(void);
 extern void test_compiler_new_node_kinds_exist(void);
-extern void test_fixture_parse_add(void);
-extern void test_fixture_parse_file(void);
+extern void test_fixture_parse_add(void); extern void test_fixture_parse_file(void);
 extern void test_fixture_parse_malformed(void);
 
 /* --- test_const_fold.c --- */
-extern void test_fold_int_arithmetic(void);
-extern void test_fold_int_comparison(void);
-extern void test_fold_unary_neg(void);
-extern void test_fold_nested_expr(void);
+extern void test_fold_int_arithmetic(void); extern void test_fold_int_comparison(void);
+extern void test_fold_unary_neg(void); extern void test_fold_nested_expr(void);
 
 /* --- test_pipeline_e2e.c --- */
-extern void test_e2e_function_call(void);
-extern void test_e2e_if_else(void);
-extern void test_e2e_fibonacci(void);
-extern void test_e2e_while_loop(void);
-extern void test_e2e_not_operator(void);
-extern void test_e2e_not_via_fixture(void);
+extern void test_e2e_function_call(void); extern void test_e2e_if_else(void);
+extern void test_e2e_fibonacci(void); extern void test_e2e_while_loop(void);
+extern void test_e2e_not_operator(void); extern void test_e2e_not_via_fixture(void);
 
 /* --- test_infra.c --- */
-extern void test_platform_strdup(void);
-extern void test_platform_clock(void);
-extern void test_platform_file_io(void);
-extern void test_diag_code_formatting(void);
-extern void test_diag_backward_compat(void);
-extern void test_string_values(void);
+extern void test_platform_strdup(void); extern void test_platform_clock(void);
+extern void test_platform_file_io(void); extern void test_diag_code_formatting(void);
+extern void test_diag_backward_compat(void); extern void test_string_values(void);
 extern void test_structured_diagnostics(void);
-extern void test_ref_interp_5_plus_10(void);
-extern void test_ref_interp_function(void);
+extern void test_ref_interp_5_plus_10(void); extern void test_ref_interp_function(void);
 extern void test_ref_interp_not(void);
 
 /* --- test_error_recovery.c --- */
-extern void test_semantic_multi_error(void);
-extern void test_semantic_poison_no_cascade(void);
-extern void test_hir_poison_dump(void);
-extern void test_hir_poison_validation(void);
+extern void test_semantic_multi_error(void); extern void test_semantic_poison_no_cascade(void);
+extern void test_hir_poison_dump(void); extern void test_hir_poison_validation(void);
 extern void test_semantic_mixed_errors(void);
 
 /* --- test_cycle.c --- */
-extern void test_cycle_sum_5(void);
-extern void test_cycle_sum_0(void);
-extern void test_cycle_sum_1(void);
-extern void test_cycle_sum_100(void);
-extern void test_cycle_interp_agreement(void);
-extern void test_cycle_semantic_lowering(void);
+extern void test_cycle_sum_5(void); extern void test_cycle_sum_0(void);
+extern void test_cycle_sum_1(void); extern void test_cycle_sum_100(void);
+extern void test_cycle_interp_agreement(void); extern void test_cycle_semantic_lowering(void);
 extern void test_cycle_scope_resolution(void);
 
 /* ================================================================
@@ -544,6 +517,18 @@ static void run_challenge_L2_tests(void) {
     RUN(test_L2_11_map_reduce);
 }
 
+/* --- test_containment.c --- */
+extern void test_geo_point_inside(void); extern void test_geo_point_outside(void);
+extern void test_geo_point_on_boundary(void); extern void test_geo_point_near_boundary(void);
+extern void test_geo_derive_basic(void);
+extern void test_L4_01_geo_basic_containment(void); extern void test_L4_02_geo_nested_circles(void);
+extern void test_L4_03_geo_boundary_ambiguous(void);
+extern void test_L4_04_geo_pipeline_hidden_effect(void);
+extern void test_L4_05_geo_pipeline_with_capability(void);
+extern void test_geo_move_across_boundary(void); extern void test_geo_deformation_stable(void);
+extern void test_geo_move_within_region(void); extern void test_geo_consistency_disagreement(void);
+extern void test_geo_fanout_measurement(void);
+
 static void run_architecture_tests(void) {
     printf("\n[Challenge Corpus Level 3: Architecture Verification]\n");
     RUN(test_arch_effect_lookup); RUN(test_arch_effect_parse); RUN(test_arch_spec_api);
@@ -565,6 +550,20 @@ static void run_concurrency_tests(void) {
     RUN(test_channel_basic);
     RUN(test_channel_wrap);
     RUN(test_gc_coro_tracing);
+}
+
+static void run_containment_tests(void) {
+    printf("\n[Experiment 2A: Geometric Containment]\n");
+    RUN(test_geo_point_inside); RUN(test_geo_point_outside);
+    RUN(test_geo_point_on_boundary); RUN(test_geo_point_near_boundary);
+    RUN(test_geo_derive_basic);
+    RUN(test_L4_01_geo_basic_containment); RUN(test_L4_02_geo_nested_circles);
+    RUN(test_L4_03_geo_boundary_ambiguous);
+    RUN(test_L4_04_geo_pipeline_hidden_effect);
+    RUN(test_L4_05_geo_pipeline_with_capability);
+    RUN(test_geo_move_across_boundary); RUN(test_geo_deformation_stable);
+    RUN(test_geo_move_within_region); RUN(test_geo_consistency_disagreement);
+    RUN(test_geo_fanout_measurement);
 }
 
 /* ================================================================
@@ -591,6 +590,7 @@ int main(void) {
     run_concurrency_tests();
     run_challenge_L2_tests();
     run_architecture_tests();
+    run_containment_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);
