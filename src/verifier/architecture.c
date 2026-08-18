@@ -100,17 +100,6 @@ static void add_error(ArcArchResult* r, ArcRegionId reg, const char* fmt, ...) {
     r->valid = false;
 }
 
-/* Check if region `child` is contained within `ancestor` (transitively) */
-static bool region_is_descendant(const ArcGraph* g, ArcRegionId child, ArcRegionId ancestor) {
-    ArcRegionId cur = child;
-    while (cur != ARC_INVALID_ID) {
-        if (cur == ancestor) return true;
-        const ArcRegion* r = &g->regions[cur];
-        cur = r->parent;
-    }
-    return false;
-}
-
 /* Find which sealed region (if any) a node's region belongs to */
 static const ArcArchRegionSpec* find_sealed_ancestor(
     const ArcGraph* g, const ArcArchSpec* spec, ArcRegionId rid)
