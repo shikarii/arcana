@@ -35,7 +35,8 @@ static void patch_calls_for_main(Compiler* c, uint32_t main_start) {
         uint8_t op = c->code.data[ip];
         int ob = arc_op_operand_bytes(op);
         if (ob < 0) break;
-        if (op == OP_CALL || op == OP_CLOSURE) {
+        if (op == OP_CALL || op == OP_CLOSURE || op == OP_THREAD_SPAWN
+            || op == OP_CORO_NEW) {
             uint16_t fi = arc_read_u16(c->code.data + ip + 1) + 1;
             c->code.data[ip + 1] = (uint8_t)(fi & 0xFF);
             c->code.data[ip + 2] = (uint8_t)(fi >> 8);

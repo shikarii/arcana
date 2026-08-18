@@ -87,7 +87,7 @@
     X(OP_CORO_RESUME,   0x71, 0, 2, 1, "coro_resume")  /* [coro, val] → [yielded] */ \
     X(OP_CORO_YIELD,    0x72, 0, 1, 1, "coro_yield")   /* [val] → [resumed_val] */ \
     X(OP_CORO_STATUS,   0x73, 0, 1, 1, "coro_status")  /* [coro] → [status_str] */ \
-    X(OP_THREAD_SPAWN,  0x74, 2, 0, 1, "thread_spawn") /* u16 func_idx → [thread] */ \
+    X(OP_THREAD_SPAWN,  0x74, 4, -1, 1, "thread_spawn") /* u16 func_idx, u8 argc → [thread] */ \
     X(OP_THREAD_JOIN,   0x75, 0, 1, 1, "thread_join")  /* [thread] → [result] */ \
     X(OP_MUTEX_NEW,     0x76, 0, 0, 1, "mutex_new")    /* → [mutex] */ \
     X(OP_MUTEX_LOCK,    0x77, 0, 1, 0, "mutex_lock")   /* [mutex] → [] */ \

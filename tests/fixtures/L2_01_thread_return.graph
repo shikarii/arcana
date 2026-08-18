@@ -1,0 +1,15 @@
+; Level 2.01: Thread return value
+; def worker(): return 42
+; main: t = thread_spawn(worker); result = thread_join(t) = 42
+; Expected result: i64(42)
+region r0 module
+region rw function parent=r0
+node wdef func_def(worker) in r0 body_region=rw arity=0
+node c42 const_int(42) in rw
+node wret return in rw
+edge e0 c42.out -> wret.value
+; main: spawn worker, join, return result
+node spawn thread_spawn(worker) in r0
+node join thread_join in r0
+edge e1 spawn.out -> join.value
+root join.out

@@ -1,0 +1,58 @@
+; Level 2.07: Mutex handoff — thread locks mutex, writes to channel, unlocks
+; Proves mutex lifecycle across threads.
+; def worker(mtx, ch): lock(mtx); send(ch, 99); unlock(mtx); return 0
+; main: mtx=mutex_new(); ch=chan_new(1)
+;   t=spawn(worker,mtx,ch); val=recv(ch); join(t)
+;   result = val = 99
+; Expected result: i64(99)
+region r0 module
+region rw function parent=r0
+node wdef func_def(worker) in r0 body_region=rw arity=2
+node wp0 param(mtx) in rw
+node wp1 param(ch) in rw
+; lock(mtx)
+node vm1 var_ref(mtx) in rw
+node lk mutex_lock in rw
+edge e0 vm1.out -> lk.value
+; send(ch, 99)
+node vc1 var_ref(ch) in rw
+node c99 const_int(99) in rw
+node ws chan_send in rw
+edge e1 vc1.out -> ws.lhs
+edge e2 c99.out -> ws.rhs
+; unlock(mtx)
+node vm2 var_ref(mtx) in rw
+node ul mutex_unlock in rw
+edge e3 vm2.out -> ul.value
+; return 0
+node wz const_int(0) in rw
+node wret return in rw
+edge e4 wz.out -> wret.value
+; --- main ---
+node mn mutex_new in r0
+node lm let(mtx) in r0
+edge e5 mn.out -> lm.value
+node cn chan_new(1) in r0
+node lch let(ch) in r0
+edge e6 cn.out -> lch.value
+; spawn worker(mtx, ch)
+node vrm var_ref(mtx) in r0
+node vrc var_ref(ch) in r0
+node spawn thread_spawn(worker) in r0
+edge e7 vrm.out -> spawn.arg0
+edge e8 vrc.out -> spawn.arg1
+node lt let(t) in r0
+edge e9 spawn.out -> lt.value
+; recv from channel
+node vrc2 var_ref(ch) in r0
+node recv chan_recv in r0
+edge e10 vrc2.out -> recv.value
+node lval let(val) in r0
+edge e11 recv.out -> lval.value
+; join
+node vrt var_ref(t) in r0
+node join thread_join in r0
+edge e12 vrt.out -> join.value
+; return val
+node vrval var_ref(val) in r0
+root vrval.out

@@ -1,0 +1,43 @@
+; Level 2.08: Thread factorial — offload computation to thread
+; def fact(n): if n<=1 return 1; return n*fact(n-1)
+; main: t = spawn(fact, 10); join(t) = 3628800
+; Expected result: i64(3628800)
+region r0 module
+region rf function parent=r0
+region rt then parent=rf
+region re else parent=rf
+node fdef func_def(fact) in r0 body_region=rf arity=1
+node p0 param(n) in rf
+; if n <= 1
+node nr1 var_ref(n) in rf
+node c1a const_int(1) in rf
+node cmp le in rf
+edge e0 nr1.out -> cmp.lhs
+edge e1 c1a.out -> cmp.rhs
+node nif if in rf then_region=rt else_region=re
+edge e2 cmp.out -> nif.cond
+; then: return 1
+node c1b const_int(1) in rt
+node ret1 return in rt
+edge e3 c1b.out -> ret1.value
+; else: return n * fact(n-1)
+node nr2 var_ref(n) in re
+node c1c const_int(1) in re
+node s0 sub in re
+edge e4 nr2.out -> s0.lhs
+edge e5 c1c.out -> s0.rhs
+node call func_call(fact) in re
+edge e6 s0.out -> call.arg0
+node nr3 var_ref(n) in re
+node m0 mul in re
+edge e7 nr3.out -> m0.lhs
+edge e8 call.out -> m0.rhs
+node ret2 return in re
+edge e9 m0.out -> ret2.value
+; main: spawn fact(10), join
+node c10 const_int(10) in r0
+node spawn thread_spawn(fact) in r0
+edge e10 c10.out -> spawn.arg0
+node join thread_join in r0
+edge e11 spawn.out -> join.value
+root join.out

@@ -1,0 +1,25 @@
+; Level 2.02: Thread with arguments
+; def adder(a, b): return a + b
+; main: t = thread_spawn(adder, 17, 25); join(t) = 42
+; Expected result: i64(42)
+region r0 module
+region ra function parent=r0
+node adef func_def(adder) in r0 body_region=ra arity=2
+node p0 param(a) in ra
+node p1 param(b) in ra
+node va var_ref(a) in ra
+node vb var_ref(b) in ra
+node add0 add in ra
+edge e0 va.out -> add0.lhs
+edge e1 vb.out -> add0.rhs
+node ret return in ra
+edge e2 add0.out -> ret.value
+; main: spawn adder(17, 25)
+node c17 const_int(17) in r0
+node c25 const_int(25) in r0
+node spawn thread_spawn(adder) in r0
+edge e3 c17.out -> spawn.arg0
+edge e4 c25.out -> spawn.arg1
+node join thread_join in r0
+edge e5 spawn.out -> join.value
+root join.out

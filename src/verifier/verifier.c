@@ -34,9 +34,10 @@ static void verify_operands(ArcVerifyResult* result, const ArcBytecodeImage* img
         break;
     }
     case OP_CALL:
+    case OP_THREAD_SPAWN:
     case OP_INTRINSIC: {
         uint16_t idx = arc_read_u16(img->code + ip);
-        if (op == OP_CALL && idx >= img->functions.count)
+        if ((op == OP_CALL || op == OP_THREAD_SPAWN) && idx >= img->functions.count)
             verr(result, fi, instr_start, "invalid function index %u", idx);
         if (op == OP_INTRINSIC && idx >= ARC_INTRINSIC_COUNT)
             verr(result, fi, instr_start, "invalid intrinsic id %u", idx);
