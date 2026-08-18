@@ -33,10 +33,10 @@ mark-sweep GC, and a three-tier concurrency model.
 - Mutexes (lock/unlock)
 - Buffered channels (send/recv with condition variables)
 
-### Testing (192 tests)
+### Testing (195 tests)
 - L0 challenge corpus: 12 machine sanity tests
 - L1 challenge corpus: 16 classic algorithm tests (factorial, GCD, sorting, etc.)
-- L2 challenge corpus: 8 concurrency tests (parallel join, channels, pipelines, mutex)
+- L2 challenge corpus: 11 concurrency tests (producer-consumer, dining philosophers, map-reduce)
 - Unit tests: bytecode, VM, GC, closures, compiler, verifier, type checker
 
 ## Next: v1

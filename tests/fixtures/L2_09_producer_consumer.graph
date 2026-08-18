@@ -1,0 +1,119 @@
+; Level 2.09: Producer-Consumer — bounded buffer
+; producer(ch): for i=1..5: send(ch, i); return 0
+; consumer(ch): total=0; for j=0..4: total += recv(ch); return total
+; main: ch = chan_new(5); spawn both; join consumer → 15
+; Expected result: i64(15)
+region r0 module
+
+; --- producer(ch): sends 1,2,3,4,5 to channel ---
+region rp function parent=r0
+region rpl cycle parent=rp
+node pdef func_def(producer) in r0 body_region=rp arity=1
+node pp0 param(ch) in rp
+; let i = 1
+node pc1 const_int(1) in rp
+node pli let(i) in rp
+edge e0 pc1.out -> pli.value
+; cycle
+node pcyc cycle in rp body_region=rpl
+; break if i > 5
+node pir1 var_ref(i) in rpl
+node pc5 const_int(5) in rpl
+node pcmp gt in rpl
+edge e1 pir1.out -> pcmp.lhs
+edge e2 pc5.out -> pcmp.rhs
+node pbrk break_if in rpl
+edge e3 pcmp.out -> pbrk.cond
+; send(ch, i)
+node pcr1 var_ref(ch) in rpl
+node pir2 var_ref(i) in rpl
+node psnd chan_send in rpl
+edge e4 pcr1.out -> psnd.lhs
+edge e5 pir2.out -> psnd.rhs
+; i = i + 1
+node pir3 var_ref(i) in rpl
+node pc1b const_int(1) in rpl
+node pinc add in rpl
+edge e6 pir3.out -> pinc.lhs
+edge e7 pc1b.out -> pinc.rhs
+node pai assign(i) in rpl
+edge e8 pinc.out -> pai.value
+; return 0
+node pz const_int(0) in rp
+node pret return in rp
+edge e9 pz.out -> pret.value
+
+; --- consumer(ch): receives 5 values and sums them ---
+region rc function parent=r0
+region rcl cycle parent=rc
+node cdef func_def(consumer) in r0 body_region=rc arity=1
+node cp0 param(ch) in rc
+; let total = 0, j = 0
+node cc0 const_int(0) in rc
+node lct let(total) in rc
+edge e10 cc0.out -> lct.value
+node cc0b const_int(0) in rc
+node lcj let(j) in rc
+edge e11 cc0b.out -> lcj.value
+; cycle
+node ccyc cycle in rc body_region=rcl
+; break if j >= 5
+node cjr1 var_ref(j) in rcl
+node cc5 const_int(5) in rcl
+node ccmp ge in rcl
+edge e12 cjr1.out -> ccmp.lhs
+edge e13 cc5.out -> ccmp.rhs
+node cbrk break_if in rcl
+edge e14 ccmp.out -> cbrk.cond
+; total = total + recv(ch)
+node ccr1 var_ref(ch) in rcl
+node crcv chan_recv in rcl
+edge e15 ccr1.out -> crcv.value
+node ctr1 var_ref(total) in rcl
+node cadd add in rcl
+edge e16 ctr1.out -> cadd.lhs
+edge e17 crcv.out -> cadd.rhs
+node cas assign(total) in rcl
+edge e18 cadd.out -> cas.value
+; j = j + 1
+node cjr2 var_ref(j) in rcl
+node cc1 const_int(1) in rcl
+node cinc add in rcl
+edge e19 cjr2.out -> cinc.lhs
+edge e20 cc1.out -> cinc.rhs
+node caj assign(j) in rcl
+edge e21 cinc.out -> caj.value
+; return total
+node ctref var_ref(total) in rc
+node cret return in rc
+edge e22 ctref.out -> cret.value
+
+; --- main ---
+node cn chan_new(5) in r0
+node lch let(ch) in r0
+edge e23 cn.out -> lch.value
+; spawn producer(ch)
+node vrc1 var_ref(ch) in r0
+node sp1 thread_spawn(producer) in r0
+edge e24 vrc1.out -> sp1.arg0
+node lt1 let(tp) in r0
+edge e25 sp1.out -> lt1.value
+; spawn consumer(ch)
+node vrc2 var_ref(ch) in r0
+node sp2 thread_spawn(consumer) in r0
+edge e26 vrc2.out -> sp2.arg0
+node lt2 let(tc) in r0
+edge e27 sp2.out -> lt2.value
+; join consumer → sum
+node vrt2 var_ref(tc) in r0
+node j2 thread_join in r0
+edge e28 vrt2.out -> j2.value
+node lres let(result) in r0
+edge e29 j2.out -> lres.value
+; join producer (cleanup)
+node vrt1 var_ref(tp) in r0
+node j1 thread_join in r0
+edge e30 vrt1.out -> j1.value
+; return consumer result
+node vres var_ref(result) in r0
+root vres.out

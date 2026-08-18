@@ -541,6 +541,8 @@ extern void test_L2_01_thread_return(void); extern void test_L2_02_thread_args(v
 extern void test_L2_03_parallel_join(void); extern void test_L2_04_channel_ping(void);
 extern void test_L2_05_channel_sum(void); extern void test_L2_06_channel_pipeline(void);
 extern void test_L2_07_mutex_handoff(void); extern void test_L2_08_thread_factorial(void);
+extern void test_L2_09_producer_consumer(void); extern void test_L2_10_dining_philosophers(void);
+extern void test_L2_11_map_reduce(void);
 
 static void run_challenge_L2_tests(void) {
     printf("\n[Challenge Corpus Level 2: Concurrency]\n");
@@ -548,6 +550,8 @@ static void run_challenge_L2_tests(void) {
     RUN(test_L2_03_parallel_join); RUN(test_L2_04_channel_ping);
     RUN(test_L2_05_channel_sum); RUN(test_L2_06_channel_pipeline);
     RUN(test_L2_07_mutex_handoff); RUN(test_L2_08_thread_factorial);
+    RUN(test_L2_09_producer_consumer); RUN(test_L2_10_dining_philosophers);
+    RUN(test_L2_11_map_reduce);
 }
 
 static void run_concurrency_tests(void) {

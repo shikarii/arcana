@@ -1,0 +1,95 @@
+; Level 2.11: Map-Reduce — parallel partial sums
+; worker(lo, hi): sum integers from lo to hi inclusive, return sum
+; main: spawn worker(1,3) + worker(4,6) + worker(7,10)
+;   (1+2+3) + (4+5+6) + (7+8+9+10) = 6 + 15 + 34 = 55
+; Expected result: i64(55)
+region r0 module
+
+; --- worker(lo, hi): sum range [lo..hi] ---
+region rw function parent=r0
+region rwl cycle parent=rw
+node wdef func_def(worker) in r0 body_region=rw arity=2
+node wp0 param(lo) in rw
+node wp1 param(hi) in rw
+; let sum = 0
+node wc0 const_int(0) in rw
+node wls let(sum) in rw
+edge e0 wc0.out -> wls.value
+; let i = lo
+node wlr var_ref(lo) in rw
+node wli let(i) in rw
+edge e1 wlr.out -> wli.value
+; cycle
+node wcyc cycle in rw body_region=rwl
+; break if i > hi
+node wir1 var_ref(i) in rwl
+node whr1 var_ref(hi) in rwl
+node wcmp gt in rwl
+edge e2 wir1.out -> wcmp.lhs
+edge e3 whr1.out -> wcmp.rhs
+node wbrk break_if in rwl
+edge e4 wcmp.out -> wbrk.cond
+; sum = sum + i
+node wsr1 var_ref(sum) in rwl
+node wir2 var_ref(i) in rwl
+node wadd add in rwl
+edge e5 wsr1.out -> wadd.lhs
+edge e6 wir2.out -> wadd.rhs
+node was assign(sum) in rwl
+edge e7 wadd.out -> was.value
+; i = i + 1
+node wir3 var_ref(i) in rwl
+node wc1 const_int(1) in rwl
+node winc add in rwl
+edge e8 wir3.out -> winc.lhs
+edge e9 wc1.out -> winc.rhs
+node wai assign(i) in rwl
+edge e10 winc.out -> wai.value
+; return sum
+node wsref var_ref(sum) in rw
+node wret return in rw
+edge e11 wsref.out -> wret.value
+
+; --- main: spawn 3 workers, join all, sum results ---
+; spawn worker(1, 3)
+node c1 const_int(1) in r0
+node c3 const_int(3) in r0
+node sp1 thread_spawn(worker) in r0
+edge e12 c1.out -> sp1.arg0
+edge e13 c3.out -> sp1.arg1
+node lt1 let(t1) in r0
+edge e14 sp1.out -> lt1.value
+; spawn worker(4, 6)
+node c4 const_int(4) in r0
+node c6 const_int(6) in r0
+node sp2 thread_spawn(worker) in r0
+edge e15 c4.out -> sp2.arg0
+edge e16 c6.out -> sp2.arg1
+node lt2 let(t2) in r0
+edge e17 sp2.out -> lt2.value
+; spawn worker(7, 10)
+node c7 const_int(7) in r0
+node c10 const_int(10) in r0
+node sp3 thread_spawn(worker) in r0
+edge e18 c7.out -> sp3.arg0
+edge e19 c10.out -> sp3.arg1
+node lt3 let(t3) in r0
+edge e20 sp3.out -> lt3.value
+; join all three
+node vt1 var_ref(t1) in r0
+node j1 thread_join in r0
+edge e21 vt1.out -> j1.value
+node vt2 var_ref(t2) in r0
+node j2 thread_join in r0
+edge e22 vt2.out -> j2.value
+node vt3 var_ref(t3) in r0
+node j3 thread_join in r0
+edge e23 vt3.out -> j3.value
+; sum = j1 + j2 + j3
+node add12 add in r0
+edge e24 j1.out -> add12.lhs
+edge e25 j2.out -> add12.rhs
+node add123 add in r0
+edge e26 add12.out -> add123.lhs
+edge e27 j3.out -> add123.rhs
+root add123.out

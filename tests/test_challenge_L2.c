@@ -1,10 +1,10 @@
 /*
  * Arcana Challenge Corpus -- Level 2: Concurrency
  *
- * 8 fixture-based tests proving the concurrency model through
+ * 11 fixture-based tests proving the concurrency model through
  * the full pipeline: fixture parse -> compile -> verify -> VM run.
- * Classic problems: thread return, arguments, parallel join,
- * channel ping, multi-send, pipeline, mutex handoff, offloaded compute.
+ * Building blocks: thread return/args, parallel join, channels, mutex.
+ * Classic problems: producer-consumer, dining philosophers, map-reduce.
  */
 #include "test_harness.h"
 #include "../src/service/arcana_service.h"
@@ -111,6 +111,39 @@ TEST(test_L2_08_thread_factorial) {
     ArcValue v = arc_service_value(r);
     ASSERT(v.tag == VAL_I64);
     ASSERT_EQ_I64(v.as.i64, 3628800);
+    arc_service_free(r);
+}
+
+/* L2.09: Producer-Consumer — bounded buffer, sum 1..5 = 15 */
+TEST(test_L2_09_producer_consumer) {
+    ArcServiceResult* r = run_fixture_L2("L2_09_producer_consumer.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 15);
+    arc_service_free(r);
+}
+
+/* L2.10: Dining Philosophers — 3 philosophers, ordered fork pickup = 3 */
+TEST(test_L2_10_dining_philosophers) {
+    ArcServiceResult* r = run_fixture_L2("L2_10_dining_philosophers.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 3);
+    arc_service_free(r);
+}
+
+/* L2.11: Map-Reduce — 3 workers sum ranges, total = 55 */
+TEST(test_L2_11_map_reduce) {
+    ArcServiceResult* r = run_fixture_L2("L2_11_map_reduce.graph");
+    ASSERT(r != NULL);
+    ASSERT(arc_service_ok(r));
+    ArcValue v = arc_service_value(r);
+    ASSERT(v.tag == VAL_I64);
+    ASSERT_EQ_I64(v.as.i64, 55);
     arc_service_free(r);
 }
 

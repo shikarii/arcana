@@ -10,7 +10,7 @@ The v0 prototype implements a compiler, bytecode VM (66 opcodes),
 mark-sweep GC, verifier, reference interpreter, type checker, and CLI
 toolchain in C17. It supports functions, closures, branching, loops,
 recursion, arrays, maps, records, exception handling, coroutines,
-threads, mutexes, and channels — 192 tests across three challenge
+threads, mutexes, and channels — 195 tests across three challenge
 corpus levels (L0 machine sanity, L1 algorithms, L2 concurrency).
 
 | Resource              | Link                                           |
@@ -50,7 +50,7 @@ cmake --build build
 ctest --test-dir build -V
 ```
 
-192 tests covering bytecode encoding, VM execution, semantic graph
+195 tests covering bytecode encoding, VM execution, semantic graph
 validation, compiler passes, GC, closures, concurrency, and end-to-end
 programs across three challenge corpus levels.
 
