@@ -65,8 +65,7 @@ extern void test_vm_intrinsic_assert_fail(void);
 extern void test_vm_intrinsic_len(void);
 extern void test_vm_intrinsic_push(void);
 extern void test_vm_intrinsic_keys(void);
-extern void test_upvalue_format_roundtrip(void);
-extern void test_vm_closure_upvalue(void);
+extern void test_upvalue_format_roundtrip(void); extern void test_vm_closure_upvalue(void);
 
 /* --- test_gc.c --- */
 extern void test_gc_collect_unreachable(void); extern void test_gc_preserve_reachable(void);
@@ -526,6 +525,7 @@ extern void test_geo_move_across_boundary(void); extern void test_geo_deformatio
 extern void test_geo_move_within_region(void); extern void test_geo_consistency_disagreement(void);
 extern void test_geo_fanout_measurement(void);
 extern void test_geo_consumed_fanout_with_verifier(void);
+extern void test_geo_crossing_not_authorization(void);
 
 static void run_architecture_tests(void) {
     printf("\n[Challenge Corpus Level 3: Architecture Verification]\n");
@@ -563,6 +563,7 @@ static void run_containment_tests(void) {
     RUN(test_geo_move_within_region); RUN(test_geo_consistency_disagreement);
     RUN(test_geo_fanout_measurement);
     RUN(test_geo_consumed_fanout_with_verifier);
+    RUN(test_geo_crossing_not_authorization);
 }
 
 /* ================================================================

@@ -404,3 +404,58 @@ TEST(test_geo_consumed_fanout_with_verifier) {
 
     arc_graph_free(&g);
 }
+
+/* --- Design invariant: crossing != authorization --- */
+/* A geometric boundary crossing must NOT automatically authorize
+ * communication between sealed regions. The architecture verifier
+ * must still reject undeclared cross-boundary dependencies. */
+TEST(test_geo_crossing_not_authorization) {
+    ArcGraph g;
+    arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    ArcRegionId r_a = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+    ArcRegionId r_b = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+    g.root_region = r0;
+
+    /* Two nodes, each in a different sealed region */
+    ArcNodeId n_src = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+    ArcNodeId n_dst = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+
+    /* Edge that will cross the boundary after geometric derivation */
+    ArcPortId p_out = arc_graph_add_port(&g, n_src, ARC_PORT_OUTPUT, "out");
+    ArcPortId p_in = arc_graph_add_port(&g, n_dst, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_out, p_in);
+
+    /* Geometry: each node inside its respective circle */
+    ArcGeoLayout layout;
+    arc_geo_init(&layout);
+    arc_geo_add_circle(&layout, r_a, 100, 100, 50);
+    arc_geo_add_circle(&layout, r_b, 300, 100, 50);
+    arc_geo_add_position(&layout, n_src, 110, 100);
+    arc_geo_add_position(&layout, n_dst, 310, 100);
+
+    ArcGeoResult gr = arc_geo_derive_regions(&g, &layout);
+    ASSERT(gr.valid);
+    ASSERT(g.nodes[n_src].region == r_a);
+    ASSERT(g.nodes[n_dst].region == r_b);
+
+    /* Seal both regions, NO channel declared between them */
+    ArcArchSpec arch;
+    arc_arch_spec_init(&arch);
+    arc_arch_spec_add_sealed(&arch, r_a, ARC_EFFECT_PURE);
+    arc_arch_spec_add_sealed(&arch, r_b, ARC_EFFECT_PURE);
+
+    /* The edge visibly crosses the boundary — but crossing is NOT
+     * authorization. The verifier must still reject this. */
+    ArcArchResult ar = arc_arch_verify(&g, &arch);
+    ASSERT(!ar.valid);
+    ASSERT(ar.error_count > 0);
+    ASSERT(strstr(ar.errors[0].message, "undeclared dependency") != NULL);
+
+    /* Now add a channel — should pass */
+    arc_arch_spec_add_channel(&arch, r_a, r_b);
+    ArcArchResult ar2 = arc_arch_verify(&g, &arch);
+    ASSERT(ar2.valid);
+
+    arc_graph_free(&g);
+}
