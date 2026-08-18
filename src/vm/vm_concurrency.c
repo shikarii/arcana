@@ -93,20 +93,24 @@ static void* thread_entry(void* arg) {
 
 static ArcStatus vm_exec_thread_spawn(ArcVm* vm) {
     uint16_t func_idx = vm_read_u16(vm);
+    uint8_t argc = vm->image->code[vm->ip++];
+    vm->ip++; /* skip padding byte */
     if (func_idx >= vm->image->functions.count) {
         vm_error(vm, "thread_spawn: invalid function index %u", func_idx);
         return ARC_ERR_RUNTIME;
     }
+    /* Pop arguments (in reverse order) */
+    ArcValue args[256];
+    for (int i = argc - 1; i >= 0; i--)
+        if (!vm_pop(vm, &args[i])) return ARC_ERR_RUNTIME;
     ArcObjThread* t = arc_obj_thread_new(vm->gc);
     if (!t) { vm_error(vm, "thread_spawn: allocation failed"); return ARC_ERR_RUNTIME; }
-    /* Set up thread's VM with shared GC */
     t->vm = (ArcVm*)calloc(1, sizeof(ArcVm));
     if (!t->vm) { vm_error(vm, "thread_spawn: vm alloc failed"); return ARC_ERR_RUNTIME; }
     t->vm->image = vm->image;
     t->vm->gc = vm->gc;
     t->vm->owns_gc = false;
     t->vm->output = vm->output;
-    /* Set up initial frame */
     const ArcFuncRecord* fn = &vm->image->functions.funcs[func_idx];
     t->vm->frames[0] = (ArcFrame){
         .func_idx = func_idx, .return_ip = 0, .base_slot = 0
@@ -114,8 +118,9 @@ static ArcStatus vm_exec_thread_spawn(ArcVm* vm) {
     t->vm->fp = 1;
     t->vm->ip = fn->code_offset;
     t->vm->sp = fn->local_count;
+    /* Copy args into thread locals, null-fill the rest */
     for (uint16_t i = 0; i < fn->local_count; i++)
-        t->vm->stack[i] = arc_val_null();
+        t->vm->stack[i] = (i < argc) ? args[i] : arc_val_null();
     if (!arc_thread_create(&t->handle, thread_entry, t)) {
         vm_error(vm, "thread_spawn: failed to create thread");
         return ARC_ERR_RUNTIME;

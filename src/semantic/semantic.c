@@ -88,6 +88,8 @@ bool is_expr_node(ArcNodeKind k) {
     case ARC_NODE_VAR_REF: case ARC_NODE_FUNC_CALL:
     case ARC_NODE_INTRINSIC_CALL:
     case ARC_NODE_RECORD_NEW: case ARC_NODE_FIELD_GET: case ARC_NODE_FIELD_SET:
+    case ARC_NODE_THREAD_SPAWN: case ARC_NODE_THREAD_JOIN:
+    case ARC_NODE_MUTEX_NEW: case ARC_NODE_CHAN_NEW: case ARC_NODE_CHAN_RECV:
         return true;
     default:
         return false;

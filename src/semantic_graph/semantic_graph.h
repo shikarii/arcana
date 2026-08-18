@@ -74,6 +74,15 @@ typedef enum {
     ARC_NODE_RECORD_NEW,    /* create empty record: attr.name = type_name */
     ARC_NODE_FIELD_GET,     /* read record field: attr.name = field_name */
     ARC_NODE_FIELD_SET,     /* write record field: attr.name = field_name */
+    /* --- Concurrency --- */
+    ARC_NODE_THREAD_SPAWN,  /* spawn thread: attr.name = func_name; args via ports */
+    ARC_NODE_THREAD_JOIN,   /* join thread: [thread] → [result] */
+    ARC_NODE_MUTEX_NEW,     /* create mutex: → [mutex] */
+    ARC_NODE_MUTEX_LOCK,    /* lock mutex: [mutex] → [] */
+    ARC_NODE_MUTEX_UNLOCK,  /* unlock mutex: [mutex] → [] */
+    ARC_NODE_CHAN_NEW,       /* create channel: attr.collection.count = cap → [chan] */
+    ARC_NODE_CHAN_SEND,      /* send to channel: [chan, val] → [] */
+    ARC_NODE_CHAN_RECV,      /* receive from channel: [chan] → [val] */
 } ArcNodeKind;
 
 /* --- Port direction --- */

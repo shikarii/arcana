@@ -1,0 +1,126 @@
+; Level 2.10: Dining Philosophers (N=3) — ordered fork pickup
+; 3 philosophers, 3 forks (mutexes). Each eats once and returns 1.
+; Deadlock prevention: always acquire lower-numbered fork first.
+;   phil_01(f0,f1): lock(f0),lock(f1),eat,unlock(f1),unlock(f0) → 1
+;   phil_12(f1,f2): lock(f1),lock(f2),eat,unlock(f2),unlock(f1) → 1
+;   phil_20(f0,f2): lock(f0),lock(f2),eat,unlock(f2),unlock(f0) → 1
+;     (phil_20 naturally wants f2,f0 but reorders to f0,f2 to prevent deadlock)
+; sum of joins = 1 + 1 + 1 = 3
+; Expected result: i64(3)
+region r0 module
+
+; --- phil_01: philosopher 0 (left=fork0, right=fork1) → ordered: f0,f1 ---
+region rp0 function parent=r0
+node p0def func_def(phil_01) in r0 body_region=rp0 arity=2
+node p0a param(f0) in rp0
+node p0b param(f1) in rp0
+node p0vf0a var_ref(f0) in rp0
+node p0lk0 mutex_lock in rp0
+edge e0 p0vf0a.out -> p0lk0.value
+node p0vf1a var_ref(f1) in rp0
+node p0lk1 mutex_lock in rp0
+edge e1 p0vf1a.out -> p0lk1.value
+node p0vf1b var_ref(f1) in rp0
+node p0ul1 mutex_unlock in rp0
+edge e2 p0vf1b.out -> p0ul1.value
+node p0vf0b var_ref(f0) in rp0
+node p0ul0 mutex_unlock in rp0
+edge e3 p0vf0b.out -> p0ul0.value
+node p0c1 const_int(1) in rp0
+node p0ret return in rp0
+edge e4 p0c1.out -> p0ret.value
+
+; --- phil_12: philosopher 1 (left=fork1, right=fork2) → ordered: f1,f2 ---
+region rp1 function parent=r0
+node p1def func_def(phil_12) in r0 body_region=rp1 arity=2
+node p1a param(f1) in rp1
+node p1b param(f2) in rp1
+node p1vf1a var_ref(f1) in rp1
+node p1lk1 mutex_lock in rp1
+edge e5 p1vf1a.out -> p1lk1.value
+node p1vf2a var_ref(f2) in rp1
+node p1lk2 mutex_lock in rp1
+edge e6 p1vf2a.out -> p1lk2.value
+node p1vf2b var_ref(f2) in rp1
+node p1ul2 mutex_unlock in rp1
+edge e7 p1vf2b.out -> p1ul2.value
+node p1vf1b var_ref(f1) in rp1
+node p1ul1 mutex_unlock in rp1
+edge e8 p1vf1b.out -> p1ul1.value
+node p1c1 const_int(1) in rp1
+node p1ret return in rp1
+edge e9 p1c1.out -> p1ret.value
+
+; --- phil_20: philosopher 2 (left=fork2, right=fork0) → ordered: f0,f2 ---
+region rp2 function parent=r0
+node p2def func_def(phil_20) in r0 body_region=rp2 arity=2
+node p2a param(lo) in rp2
+node p2b param(hi) in rp2
+node p2vloa var_ref(lo) in rp2
+node p2lklo mutex_lock in rp2
+edge e10 p2vloa.out -> p2lklo.value
+node p2vhia var_ref(hi) in rp2
+node p2lkhi mutex_lock in rp2
+edge e11 p2vhia.out -> p2lkhi.value
+node p2vhib var_ref(hi) in rp2
+node p2ulhi mutex_unlock in rp2
+edge e12 p2vhib.out -> p2ulhi.value
+node p2vlob var_ref(lo) in rp2
+node p2ullo mutex_unlock in rp2
+edge e13 p2vlob.out -> p2ullo.value
+node p2c1 const_int(1) in rp2
+node p2ret return in rp2
+edge e14 p2c1.out -> p2ret.value
+
+; --- main: create forks, spawn philosophers, join all, sum ---
+node mn0 mutex_new in r0
+node lf0 let(f0) in r0
+edge e15 mn0.out -> lf0.value
+node mn1 mutex_new in r0
+node lf1 let(f1) in r0
+edge e16 mn1.out -> lf1.value
+node mn2 mutex_new in r0
+node lf2 let(f2) in r0
+edge e17 mn2.out -> lf2.value
+; spawn phil_01(f0, f1)
+node vf0a var_ref(f0) in r0
+node vf1a var_ref(f1) in r0
+node sp0 thread_spawn(phil_01) in r0
+edge e18 vf0a.out -> sp0.arg0
+edge e19 vf1a.out -> sp0.arg1
+node lt0 let(t0) in r0
+edge e20 sp0.out -> lt0.value
+; spawn phil_12(f1, f2)
+node vf1b var_ref(f1) in r0
+node vf2a var_ref(f2) in r0
+node sp1 thread_spawn(phil_12) in r0
+edge e21 vf1b.out -> sp1.arg0
+edge e22 vf2a.out -> sp1.arg1
+node lt1 let(t1) in r0
+edge e23 sp1.out -> lt1.value
+; spawn phil_20(f0, f2) — args are (f0=lo, f2=hi) for ordered pickup
+node vf0b var_ref(f0) in r0
+node vf2b var_ref(f2) in r0
+node sp2 thread_spawn(phil_20) in r0
+edge e24 vf0b.out -> sp2.arg0
+edge e25 vf2b.out -> sp2.arg1
+node lt2 let(t2) in r0
+edge e26 sp2.out -> lt2.value
+; join all three
+node vt0 var_ref(t0) in r0
+node j0 thread_join in r0
+edge e27 vt0.out -> j0.value
+node vt1 var_ref(t1) in r0
+node j1 thread_join in r0
+edge e28 vt1.out -> j1.value
+node vt2 var_ref(t2) in r0
+node j2 thread_join in r0
+edge e29 vt2.out -> j2.value
+; sum = j0 + j1 + j2
+node add01 add in r0
+edge e30 j0.out -> add01.lhs
+edge e31 j1.out -> add01.rhs
+node add012 add in r0
+edge e32 add01.out -> add012.lhs
+edge e33 j2.out -> add012.rhs
+root add012.out

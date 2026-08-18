@@ -115,6 +115,10 @@ static const struct { const char* name; ArcNodeKind kind; } kind_table[] = {
     {"closure",ARC_NODE_CLOSURE}, {"intrinsic_call",ARC_NODE_INTRINSIC_CALL},
     {"record_new",ARC_NODE_RECORD_NEW}, {"field_get",ARC_NODE_FIELD_GET},
     {"field_set",ARC_NODE_FIELD_SET},
+    {"thread_spawn",ARC_NODE_THREAD_SPAWN}, {"thread_join",ARC_NODE_THREAD_JOIN},
+    {"mutex_new",ARC_NODE_MUTEX_NEW}, {"mutex_lock",ARC_NODE_MUTEX_LOCK},
+    {"mutex_unlock",ARC_NODE_MUTEX_UNLOCK}, {"chan_new",ARC_NODE_CHAN_NEW},
+    {"chan_send",ARC_NODE_CHAN_SEND}, {"chan_recv",ARC_NODE_CHAN_RECV},
     {NULL, ARC_NODE_CONST_NULL}
 };
 
@@ -236,6 +240,18 @@ static void add_default_ports(ParseState* s, const char* node_name, ArcNodeId ni
         add_output_port(s, node_name, nid); break;
     case ARC_NODE_BREAK_IF:
         add_input_port(s, node_name, nid, "cond"); break;
+    case ARC_NODE_THREAD_SPAWN:
+        add_output_port(s, node_name, nid); break;
+    case ARC_NODE_THREAD_JOIN:
+        add_unary_ports(s, node_name, nid); break;
+    case ARC_NODE_MUTEX_NEW: case ARC_NODE_CHAN_NEW:
+        add_output_port(s, node_name, nid); break;
+    case ARC_NODE_MUTEX_LOCK: case ARC_NODE_MUTEX_UNLOCK:
+        add_input_port(s, node_name, nid, "value"); break;
+    case ARC_NODE_CHAN_SEND:
+        add_binary_ports(s, node_name, nid); break;
+    case ARC_NODE_CHAN_RECV:
+        add_unary_ports(s, node_name, nid); break;
     case ARC_NODE_TRY: case ARC_NODE_CYCLE: break;
     default: break;
     }
@@ -367,9 +383,11 @@ static void set_node_attr(ArcNode* n, ArcNodeKind kind, const char* attr_buf) {
         n->attr.func.arity = 0;
         n->attr.func.body_region = ARC_INVALID_ID;
         break;
-    case ARC_NODE_FUNC_CALL:
+    case ARC_NODE_FUNC_CALL: case ARC_NODE_THREAD_SPAWN:
     case ARC_NODE_RECORD_NEW: case ARC_NODE_FIELD_GET: case ARC_NODE_FIELD_SET:
         n->attr.name = arc_strdup(attr_buf); break;
+    case ARC_NODE_CHAN_NEW:
+        n->attr.collection.count = attr_buf[0] ? (uint16_t)atoi(attr_buf) : 1; break;
     case ARC_NODE_CONST_STRING:
         n->attr.string_value.data = arc_strdup(attr_buf);
         n->attr.string_value.len = (uint32_t)strlen(attr_buf); break;

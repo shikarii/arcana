@@ -411,6 +411,47 @@ static void compile_record_op(Compiler* c, ArcNodeId node_id, const ArcNode* n) 
     }
 }
 
+/* --- Concurrency compilation --- */
+static void compile_concurrency(Compiler* c, ArcNodeId node_id, const ArcNode* n) {
+    switch (n->kind) {
+    case ARC_NODE_THREAD_SPAWN: {
+        uint8_t argc = compile_input_ports(c, n);
+        uint16_t func_idx = UINT16_MAX;
+        for (uint16_t fi = 0; fi < c->image.functions.count; fi++) {
+            uint16_t ni = c->image.functions.funcs[fi].name_const_idx;
+            if (ni < c->image.constants.count &&
+                c->image.constants.entries[ni].tag == ARC_CONST_STRING &&
+                strcmp(c->image.constants.entries[ni].as.str.data, n->attr.name) == 0) {
+                func_idx = fi; break;
+            }
+        }
+        if (func_idx == UINT16_MAX) {
+            cerr(c, "thread_spawn: undefined function '%s'", n->attr.name); return;
+        }
+        emit_byte(c, OP_THREAD_SPAWN); emit_u16(c, func_idx);
+        emit_byte(c, argc); emit_byte(c, 0);
+        track_stack(c, argc, 1);
+        break;
+    }
+    case ARC_NODE_THREAD_JOIN:
+        compile_value_port(c, node_id); emit_op(c, OP_THREAD_JOIN); break;
+    case ARC_NODE_MUTEX_NEW:
+        emit_op(c, OP_MUTEX_NEW); break;
+    case ARC_NODE_MUTEX_LOCK:
+        compile_value_port(c, node_id); emit_op(c, OP_MUTEX_LOCK); break;
+    case ARC_NODE_MUTEX_UNLOCK:
+        compile_value_port(c, node_id); emit_op(c, OP_MUTEX_UNLOCK); break;
+    case ARC_NODE_CHAN_NEW:
+        emit_byte(c, OP_CHAN_NEW); emit_u16(c, n->attr.collection.count);
+        track_stack(c, 0, 1); break;
+    case ARC_NODE_CHAN_SEND:
+        compile_binary(c, node_id, OP_CHAN_SEND); break;
+    case ARC_NODE_CHAN_RECV:
+        compile_value_port(c, node_id); emit_op(c, OP_CHAN_RECV); break;
+    default: break;
+    }
+}
+
 /* --- Main compile_node: dispatch switch --- */
 void compile_node(Compiler* c, ArcNodeId node_id) {
     if (node_id >= c->graph->node_count) { cerr(c, "invalid node id %u", node_id); return; }
@@ -435,6 +476,10 @@ void compile_node(Compiler* c, ArcNodeId node_id) {
     case ARC_NODE_INTRINSIC_CALL: compile_intrinsic_call(c, n); break;
     case ARC_NODE_RECORD_NEW: case ARC_NODE_FIELD_GET: case ARC_NODE_FIELD_SET:
         compile_record_op(c, node_id, n); break;
+    case ARC_NODE_THREAD_SPAWN: case ARC_NODE_THREAD_JOIN:
+    case ARC_NODE_MUTEX_NEW: case ARC_NODE_MUTEX_LOCK: case ARC_NODE_MUTEX_UNLOCK:
+    case ARC_NODE_CHAN_NEW: case ARC_NODE_CHAN_SEND: case ARC_NODE_CHAN_RECV:
+        compile_concurrency(c, node_id, n); break;
     case ARC_NODE_VAR_REF: {
         int slot = find_local(c, n->attr.name);
         if (slot >= 0) { emit_op(c, OP_LOAD_LOCAL); emit_u16(c, (uint16_t)slot); }

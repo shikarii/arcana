@@ -1,0 +1,36 @@
+; Level 2.03: Parallel join — spawn two threads, join both, sum results
+; def work_a(): return 17
+; def work_b(): return 25
+; let t1 = spawn(work_a); let t2 = spawn(work_b)
+; result = join(t1) + join(t2) = 42
+; Expected result: i64(42)
+region r0 module
+region ra function parent=r0
+region rb function parent=r0
+node adef func_def(work_a) in r0 body_region=ra arity=0
+node c17 const_int(17) in ra
+node aret return in ra
+edge e0 c17.out -> aret.value
+node bdef func_def(work_b) in r0 body_region=rb arity=0
+node c25 const_int(25) in rb
+node bret return in rb
+edge e1 c25.out -> bret.value
+; main: let-bind spawns for sequencing
+node sp1 thread_spawn(work_a) in r0
+node lt1 let(t1) in r0
+edge e2 sp1.out -> lt1.value
+node sp2 thread_spawn(work_b) in r0
+node lt2 let(t2) in r0
+edge e3 sp2.out -> lt2.value
+; join both
+node vr1 var_ref(t1) in r0
+node j1 thread_join in r0
+edge e4 vr1.out -> j1.value
+node vr2 var_ref(t2) in r0
+node j2 thread_join in r0
+edge e5 vr2.out -> j2.value
+; sum
+node sum add in r0
+edge e6 j1.out -> sum.lhs
+edge e7 j2.out -> sum.rhs
+root sum.out

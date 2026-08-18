@@ -13,7 +13,7 @@ void arc_graph_free(ArcGraph* g) {
             ArcNodeKind k = g->nodes[i].kind;
             if (k == ARC_NODE_LET || k == ARC_NODE_VAR_REF ||
                 k == ARC_NODE_ASSIGN || k == ARC_NODE_PARAM ||
-                k == ARC_NODE_FUNC_CALL ||
+                k == ARC_NODE_FUNC_CALL || k == ARC_NODE_THREAD_SPAWN ||
                 k == ARC_NODE_RECORD_NEW || k == ARC_NODE_FIELD_GET ||
                 k == ARC_NODE_FIELD_SET)
                 ARC_FREE((void*)g->nodes[i].attr.name);

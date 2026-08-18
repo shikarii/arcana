@@ -1,0 +1,72 @@
+; Level 2.05: Channel sum — thread sends 3 values, main sums them
+; def producer(ch): send(ch,10); send(ch,20); send(ch,30); return 0
+; main: ch=chan_new(3); t=spawn(producer,ch)
+;   a=recv(ch); b=recv(ch); c=recv(ch); join(t)
+;   result = a + b + c = 60
+; Expected result: i64(60)
+region r0 module
+region rp function parent=r0
+node pdef func_def(producer) in r0 body_region=rp arity=1
+node pp param(ch) in rp
+; send(ch, 10)
+node vp1 var_ref(ch) in rp
+node c10 const_int(10) in rp
+node s1 chan_send in rp
+edge e0 vp1.out -> s1.lhs
+edge e1 c10.out -> s1.rhs
+; send(ch, 20)
+node vp2 var_ref(ch) in rp
+node c20 const_int(20) in rp
+node s2 chan_send in rp
+edge e2 vp2.out -> s2.lhs
+edge e3 c20.out -> s2.rhs
+; send(ch, 30)
+node vp3 var_ref(ch) in rp
+node c30 const_int(30) in rp
+node s3 chan_send in rp
+edge e4 vp3.out -> s3.lhs
+edge e5 c30.out -> s3.rhs
+; return 0
+node cz const_int(0) in rp
+node pret return in rp
+edge e6 cz.out -> pret.value
+; main
+node cn chan_new(3) in r0
+node lch let(ch) in r0
+edge e7 cn.out -> lch.value
+node vrc var_ref(ch) in r0
+node spawn thread_spawn(producer) in r0
+edge e8 vrc.out -> spawn.arg0
+node lt let(t) in r0
+edge e9 spawn.out -> lt.value
+; recv three values
+node vr1 var_ref(ch) in r0
+node r1 chan_recv in r0
+edge e10 vr1.out -> r1.value
+node la let(a) in r0
+edge e11 r1.out -> la.value
+node vr2 var_ref(ch) in r0
+node r2 chan_recv in r0
+edge e12 vr2.out -> r2.value
+node lb let(b) in r0
+edge e13 r2.out -> lb.value
+node vr3 var_ref(ch) in r0
+node r3 chan_recv in r0
+edge e14 vr3.out -> r3.value
+node lc let(c) in r0
+edge e15 r3.out -> lc.value
+; join
+node vrt var_ref(t) in r0
+node join thread_join in r0
+edge e16 vrt.out -> join.value
+; sum: a + b + c
+node va var_ref(a) in r0
+node vb var_ref(b) in r0
+node add1 add in r0
+edge e17 va.out -> add1.lhs
+edge e18 vb.out -> add1.rhs
+node vc var_ref(c) in r0
+node add2 add in r0
+edge e19 add1.out -> add2.lhs
+edge e20 vc.out -> add2.rhs
+root add2.out

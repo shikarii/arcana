@@ -1,0 +1,41 @@
+; Level 2.04: Channel ping — thread sends value via channel
+; def sender(ch): chan_send(ch, 42); return 0
+; let ch = chan_new(1); let t = spawn(sender, ch)
+; let val = chan_recv(ch); join(t); result = val = 42
+; Expected result: i64(42)
+region r0 module
+region rs function parent=r0
+node sdef func_def(sender) in r0 body_region=rs arity=1
+node p0 param(ch) in rs
+; chan_send(ch, 42)
+node vch var_ref(ch) in rs
+node c42 const_int(42) in rs
+node send chan_send in rs
+edge e0 vch.out -> send.lhs
+edge e1 c42.out -> send.rhs
+; return 0
+node c0 const_int(0) in rs
+node sret return in rs
+edge e2 c0.out -> sret.value
+; main
+node cn chan_new(1) in r0
+node lch let(ch) in r0
+edge e3 cn.out -> lch.value
+node vrch var_ref(ch) in r0
+node spawn thread_spawn(sender) in r0
+edge e4 vrch.out -> spawn.arg0
+node lt let(t) in r0
+edge e5 spawn.out -> lt.value
+; recv from channel
+node vrch2 var_ref(ch) in r0
+node recv chan_recv in r0
+edge e6 vrch2.out -> recv.value
+node lval let(val) in r0
+edge e7 recv.out -> lval.value
+; join thread
+node vrt var_ref(t) in r0
+node join thread_join in r0
+edge e8 vrt.out -> join.value
+; return val
+node vrval var_ref(val) in r0
+root vrval.out

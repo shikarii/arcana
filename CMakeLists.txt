@@ -124,6 +124,7 @@ add_executable(arcana_tests
     tests/test_challenge_L1.c
     tests/test_const_fold.c
     tests/test_concurrency.c
+    tests/test_challenge_L2.c
 )
 target_link_libraries(arcana_tests
     arcana_bytecode

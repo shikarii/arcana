@@ -1,0 +1,106 @@
+; Level 2.06: Channel pipeline — two-stage pipeline via threads
+; stage1(in,out): val=recv(in); send(out, val*2); return 0
+; stage2(in,out): val=recv(in); send(out, val+3); return 0
+; main: ch1=chan(1); ch2=chan(1); ch3=chan(1)
+;   t1=spawn(stage1,ch1,ch2); t2=spawn(stage2,ch2,ch3)
+;   send(ch1, 10); result=recv(ch3) = 10*2+3 = 23
+; Expected result: i64(23)
+region r0 module
+region r1 function parent=r0
+region r2 function parent=r0
+; --- stage1(in_ch, out_ch) ---
+node s1def func_def(stage1) in r0 body_region=r1 arity=2
+node s1p0 param(in_ch) in r1
+node s1p1 param(out_ch) in r1
+; val = recv(in_ch)
+node s1vi var_ref(in_ch) in r1
+node s1r chan_recv in r1
+edge e0 s1vi.out -> s1r.value
+node s1lv let(val) in r1
+edge e1 s1r.out -> s1lv.value
+; send(out_ch, val * 2)
+node s1vo var_ref(out_ch) in r1
+node s1vv var_ref(val) in r1
+node s1c2 const_int(2) in r1
+node s1m mul in r1
+edge e2 s1vv.out -> s1m.lhs
+edge e3 s1c2.out -> s1m.rhs
+node s1s chan_send in r1
+edge e4 s1vo.out -> s1s.lhs
+edge e5 s1m.out -> s1s.rhs
+; return 0
+node s1z const_int(0) in r1
+node s1ret return in r1
+edge e6 s1z.out -> s1ret.value
+; --- stage2(in_ch, out_ch) ---
+node s2def func_def(stage2) in r0 body_region=r2 arity=2
+node s2p0 param(in_ch) in r2
+node s2p1 param(out_ch) in r2
+; val = recv(in_ch)
+node s2vi var_ref(in_ch) in r2
+node s2r chan_recv in r2
+edge e7 s2vi.out -> s2r.value
+node s2lv let(val) in r2
+edge e8 s2r.out -> s2lv.value
+; send(out_ch, val + 3)
+node s2vo var_ref(out_ch) in r2
+node s2vv var_ref(val) in r2
+node s2c3 const_int(3) in r2
+node s2a add in r2
+edge e9 s2vv.out -> s2a.lhs
+edge e10 s2c3.out -> s2a.rhs
+node s2s chan_send in r2
+edge e11 s2vo.out -> s2s.lhs
+edge e12 s2a.out -> s2s.rhs
+; return 0
+node s2z const_int(0) in r2
+node s2ret return in r2
+edge e13 s2z.out -> s2ret.value
+; --- main ---
+node cn1 chan_new(1) in r0
+node lc1 let(ch1) in r0
+edge e14 cn1.out -> lc1.value
+node cn2 chan_new(1) in r0
+node lc2 let(ch2) in r0
+edge e15 cn2.out -> lc2.value
+node cn3 chan_new(1) in r0
+node lc3 let(ch3) in r0
+edge e16 cn3.out -> lc3.value
+; spawn stage1(ch1, ch2)
+node vc1a var_ref(ch1) in r0
+node vc2a var_ref(ch2) in r0
+node sp1 thread_spawn(stage1) in r0
+edge e17 vc1a.out -> sp1.arg0
+edge e18 vc2a.out -> sp1.arg1
+node lt1 let(t1) in r0
+edge e19 sp1.out -> lt1.value
+; spawn stage2(ch2, ch3)
+node vc2b var_ref(ch2) in r0
+node vc3a var_ref(ch3) in r0
+node sp2 thread_spawn(stage2) in r0
+edge e20 vc2b.out -> sp2.arg0
+edge e21 vc3a.out -> sp2.arg1
+node lt2 let(t2) in r0
+edge e22 sp2.out -> lt2.value
+; send(ch1, 10)
+node vc1b var_ref(ch1) in r0
+node c10 const_int(10) in r0
+node msend chan_send in r0
+edge e23 vc1b.out -> msend.lhs
+edge e24 c10.out -> msend.rhs
+; result = recv(ch3)
+node vc3b var_ref(ch3) in r0
+node mrecv chan_recv in r0
+edge e25 vc3b.out -> mrecv.value
+node lres let(result) in r0
+edge e26 mrecv.out -> lres.value
+; join threads
+node vt1 var_ref(t1) in r0
+node j1 thread_join in r0
+edge e27 vt1.out -> j1.value
+node vt2 var_ref(t2) in r0
+node j2 thread_join in r0
+edge e28 vt2.out -> j2.value
+; return result
+node vres var_ref(result) in r0
+root vres.out
