@@ -386,18 +386,12 @@ static void run_closure_tests(void) {
 }
 
 /* --- test_challenge_L0.c --- */
-extern void test_L0_01_constant(void);
-extern void test_L0_02_addition(void);
-extern void test_L0_03_arithmetic(void);
-extern void test_L0_04_branch(void);
-extern void test_L0_05_loop(void);
-extern void test_L0_06_function(void);
-extern void test_L0_07_nested_calls(void);
-extern void test_L0_08_fib_recursive(void);
-extern void test_L0_09_fib_iterative(void);
-extern void test_L0_10_stress(void);
-extern void test_L0_11_comparisons(void);
-extern void test_L0_12_invalid_rejection(void);
+extern void test_L0_01_constant(void); extern void test_L0_02_addition(void);
+extern void test_L0_03_arithmetic(void); extern void test_L0_04_branch(void);
+extern void test_L0_05_loop(void); extern void test_L0_06_function(void);
+extern void test_L0_07_nested_calls(void); extern void test_L0_08_fib_recursive(void);
+extern void test_L0_09_fib_iterative(void); extern void test_L0_10_stress(void);
+extern void test_L0_11_comparisons(void); extern void test_L0_12_invalid_rejection(void);
 
 static void run_challenge_L0_tests(void) {
     printf("\n[Challenge Corpus Level 0: Machine Sanity]\n");
@@ -416,14 +410,10 @@ static void run_challenge_L0_tests(void) {
 }
 
 /* --- test_service.c --- */
-extern void test_service_run_ok(void);
-extern void test_service_run_add(void);
-extern void test_service_run_parse_fail(void);
-extern void test_service_check_ok(void);
-extern void test_service_compile_ok(void);
-extern void test_service_check_parse_fail(void);
-extern void test_service_diagnostics(void);
-extern void test_service_error_empty_on_success(void);
+extern void test_service_run_ok(void); extern void test_service_run_add(void);
+extern void test_service_run_parse_fail(void); extern void test_service_check_ok(void);
+extern void test_service_compile_ok(void); extern void test_service_check_parse_fail(void);
+extern void test_service_diagnostics(void); extern void test_service_error_empty_on_success(void);
 
 static void run_service_tests(void) {
     printf("\n[Tooling Service API]\n");
@@ -438,22 +428,14 @@ static void run_service_tests(void) {
 }
 
 /* --- test_challenge_L1.c --- */
-extern void test_L1_01_factorial(void);
-extern void test_L1_02_gcd(void);
-extern void test_L1_03_power(void);
-extern void test_L1_04_fizzbuzz(void);
-extern void test_L1_05_sum_squares(void);
-extern void test_L1_06_collatz(void);
-extern void test_L1_07_is_prime(void);
-extern void test_L1_08_mutual_recursion(void);
-extern void test_L1_09_bubble_sort(void);
-extern void test_L1_10_binary_search(void);
-extern void test_L1_11_selection_sort(void);
-extern void test_L1_12_max_subarray(void);
-extern void test_L1_13_insertion_sort(void);
-extern void test_L1_14_two_sum(void);
-extern void test_L1_15_record_point(void);
-extern void test_L1_16_linked_list(void);
+extern void test_L1_01_factorial(void); extern void test_L1_02_gcd(void);
+extern void test_L1_03_power(void); extern void test_L1_04_fizzbuzz(void);
+extern void test_L1_05_sum_squares(void); extern void test_L1_06_collatz(void);
+extern void test_L1_07_is_prime(void); extern void test_L1_08_mutual_recursion(void);
+extern void test_L1_09_bubble_sort(void); extern void test_L1_10_binary_search(void);
+extern void test_L1_11_selection_sort(void); extern void test_L1_12_max_subarray(void);
+extern void test_L1_13_insertion_sort(void); extern void test_L1_14_two_sum(void);
+extern void test_L1_15_record_point(void); extern void test_L1_16_linked_list(void);
 
 static void run_challenge_L1_tests(void) {
     printf("\n[Challenge Corpus Level 1: Classic Algorithms]\n");
@@ -476,16 +458,11 @@ static void run_challenge_L1_tests(void) {
 }
 
 /* --- test_concurrency.c --- */
-extern void test_coro_create(void);
-extern void test_coro_yield_resume(void);
-extern void test_coro_completion(void);
-extern void test_coro_resume_dead(void);
-extern void test_mutex_basic(void);
-extern void test_channel_basic(void);
-extern void test_channel_wrap(void);
-extern void test_gc_coro_tracing(void);
-extern void test_concurrency_opcodes(void);
-extern void test_concurrency_type_names(void);
+extern void test_coro_create(void); extern void test_coro_yield_resume(void);
+extern void test_coro_completion(void); extern void test_coro_resume_dead(void);
+extern void test_mutex_basic(void); extern void test_channel_basic(void);
+extern void test_channel_wrap(void); extern void test_gc_coro_tracing(void);
+extern void test_concurrency_opcodes(void); extern void test_concurrency_type_names(void);
 
 /* --- test_challenge_L2.c --- */
 extern void test_L2_01_thread_return(void); extern void test_L2_02_thread_args(void);
@@ -527,6 +504,16 @@ extern void test_geo_fanout_measurement(void);
 extern void test_geo_consumed_fanout_with_verifier(void);
 extern void test_geo_crossing_not_authorization(void);
 
+/* --- test_cyclic_order.c --- */
+extern void test_cyclic_next_prev(void); extern void test_cyclic_adjacent(void);
+extern void test_cyclic_minimal_pair(void);
+extern void test_fingerprint_same_topology(void); extern void test_fingerprint_different_topology(void);
+extern void test_fingerprint_hidden_topology_control(void);
+extern void test_cyclic_geo_derive_basic(void); extern void test_cyclic_geo_g3(void);
+extern void test_cyclic_geo_g4_control(void); extern void test_cyclic_geo_angular_ambiguity(void);
+extern void test_cyclic_geo_center_proximity(void); extern void test_cyclic_geo_reflection(void);
+extern void test_cyclic_sensor_ring_realistic(void);
+
 static void run_architecture_tests(void) {
     printf("\n[Challenge Corpus Level 3: Architecture Verification]\n");
     RUN(test_arch_effect_lookup); RUN(test_arch_effect_parse); RUN(test_arch_spec_api);
@@ -566,6 +553,18 @@ static void run_containment_tests(void) {
     RUN(test_geo_crossing_not_authorization);
 }
 
+static void run_cyclic_order_tests(void) {
+    printf("\n[Experiment 2B: Cyclic Order]\n");
+    RUN(test_cyclic_next_prev); RUN(test_cyclic_adjacent);
+    RUN(test_cyclic_minimal_pair);
+    RUN(test_fingerprint_same_topology); RUN(test_fingerprint_different_topology);
+    RUN(test_fingerprint_hidden_topology_control);
+    RUN(test_cyclic_geo_derive_basic); RUN(test_cyclic_geo_g3);
+    RUN(test_cyclic_geo_g4_control); RUN(test_cyclic_geo_angular_ambiguity);
+    RUN(test_cyclic_geo_center_proximity); RUN(test_cyclic_geo_reflection);
+    RUN(test_cyclic_sensor_ring_realistic);
+}
+
 /* ================================================================
  * Main
  * ================================================================ */
@@ -591,6 +590,7 @@ int main(void) {
     run_challenge_L2_tests();
     run_architecture_tests();
     run_containment_tests();
+    run_cyclic_order_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);
