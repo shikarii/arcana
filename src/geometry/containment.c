@@ -158,17 +158,13 @@ ArcGeoResult arc_geo_derive_regions(ArcGraph* g, const ArcGeoLayout* layout) {
             dm->region = region;
         }
 
-        /* === Semantic fan-out tracking === */
-        /* Each of these increments represents a semantic fact
-         * derived from the single geometric relation inside(x, R).
-         * Only count if actually used by downstream systems. */
-
-        result.fanout_membership++;   /* always: region membership */
-        result.fanout_scope++;        /* scope = region (lexical scope) */
-        result.fanout_effect_owner++; /* effect ownership = region */
-        result.fanout_capability++;   /* capability context = sealed ancestor */
-        result.fanout_dep_owner++;    /* dependency owner = region */
-        result.fanout_visibility++;   /* visibility boundary = region */
+        /* Declared (potential) fan-out — 6 categories per derivation */
+        result.fanout_membership++;
+        result.fanout_scope++;
+        result.fanout_effect_owner++;
+        result.fanout_capability++;
+        result.fanout_dep_owner++;
+        result.fanout_visibility++;
     }
 
     return result;
@@ -211,4 +207,85 @@ bool arc_geo_deformation_stable(ArcGraph* g,
         if (r_after.members[i].region != saved[i]) return false;
     }
     return true;
+}
+
+/* --- Fan-out consumption measurement --- */
+
+/* Walk up region tree to find a sealed ancestor in the arch spec */
+static bool has_sealed_ancestor(const ArcGraph* g, const ArcArchSpec* arch,
+                                ArcRegionId rid) {
+    ArcRegionId cur = rid;
+    while (cur != ARC_INVALID_ID) {
+        for (uint32_t i = 0; i < arch->region_count; i++) {
+            if (arch->regions[i].region == cur && arch->regions[i].sealed)
+                return true;
+        }
+        if (cur >= g->region_count) break;
+        cur = g->regions[cur].parent;
+    }
+    return false;
+}
+
+/* Check if any edge incident on node crosses a region boundary */
+static bool has_cross_boundary_edge(const ArcGraph* g, ArcNodeId nid) {
+    ArcRegionId node_rid = g->nodes[nid].region;
+    for (uint32_t ei = 0; ei < g->edge_count; ei++) {
+        const ArcSemEdge* e = &g->edges[ei];
+        ArcNodeId from_owner = g->ports[e->from].owner;
+        ArcNodeId to_owner = g->ports[e->to].owner;
+        if (from_owner == nid || to_owner == nid) {
+            ArcNodeId other = (from_owner == nid) ? to_owner : from_owner;
+            if (g->nodes[other].region != node_rid) return true;
+        }
+    }
+    return false;
+}
+
+/*
+ * Measure which fan-out categories were actually consumed by downstream
+ * analysis. Populates the consumed_* fields in result.
+ *
+ * For each derived node:
+ *   membership:   always consumed (the derivation itself is the fact)
+ *   effect_owner: consumed if a sealed ancestor exists (effect collection
+ *                 walks the region's members to attribute effects)
+ *   capability:   consumed if a sealed ancestor exists (capability check
+ *                 uses sealed ancestry to enforce capability requirements)
+ *   dep_owner:    consumed if any incident edge crosses a region boundary
+ *                 (verify_boundaries reads node.region for each edge endpoint)
+ *   scope:        not yet consumed (no scope resolver implemented)
+ *   visibility:   not yet consumed (no visibility resolver implemented)
+ */
+void arc_geo_measure_consumed_fanout(ArcGeoResult* result,
+                                     const ArcGraph* g,
+                                     const ArcArchSpec* arch) {
+    result->consumed_membership = 0;
+    result->consumed_scope = 0;
+    result->consumed_effect_owner = 0;
+    result->consumed_capability = 0;
+    result->consumed_dep_owner = 0;
+    result->consumed_visibility = 0;
+
+    for (uint32_t i = 0; i < result->member_count; i++) {
+        ArcNodeId nid = result->members[i].node;
+        ArcRegionId rid = result->members[i].region;
+        if (nid >= g->node_count) continue;
+        (void)rid;
+
+        /* Membership: always consumed */
+        result->consumed_membership++;
+
+        /* Effect ownership + capability context: consumed if sealed ancestor */
+        if (arch && has_sealed_ancestor(g, arch, g->nodes[nid].region)) {
+            result->consumed_effect_owner++;
+            result->consumed_capability++;
+        }
+
+        /* Dependency ownership: consumed if cross-boundary edge exists */
+        if (arch && has_cross_boundary_edge(g, nid))
+            result->consumed_dep_owner++;
+
+        /* Scope: no resolver implemented */
+        /* Visibility: no resolver implemented */
+    }
 }

@@ -69,12 +69,9 @@ extern void test_upvalue_format_roundtrip(void);
 extern void test_vm_closure_upvalue(void);
 
 /* --- test_gc.c --- */
-extern void test_gc_collect_unreachable(void);
-extern void test_gc_preserve_reachable(void);
-extern void test_gc_array_tracing(void);
-extern void test_gc_map_tracing(void);
-extern void test_gc_stress(void);
-extern void test_gc_stress_mode(void);
+extern void test_gc_collect_unreachable(void); extern void test_gc_preserve_reachable(void);
+extern void test_gc_array_tracing(void); extern void test_gc_map_tracing(void);
+extern void test_gc_stress(void); extern void test_gc_stress_mode(void);
 
 /* --- test_graph.c --- */
 extern void test_graph_valid(void); extern void test_graph_invalid_edge(void);
@@ -528,6 +525,7 @@ extern void test_L4_05_geo_pipeline_with_capability(void);
 extern void test_geo_move_across_boundary(void); extern void test_geo_deformation_stable(void);
 extern void test_geo_move_within_region(void); extern void test_geo_consistency_disagreement(void);
 extern void test_geo_fanout_measurement(void);
+extern void test_geo_consumed_fanout_with_verifier(void);
 
 static void run_architecture_tests(void) {
     printf("\n[Challenge Corpus Level 3: Architecture Verification]\n");
@@ -564,6 +562,7 @@ static void run_containment_tests(void) {
     RUN(test_geo_move_across_boundary); RUN(test_geo_deformation_stable);
     RUN(test_geo_move_within_region); RUN(test_geo_consistency_disagreement);
     RUN(test_geo_fanout_measurement);
+    RUN(test_geo_consumed_fanout_with_verifier);
 }
 
 /* ================================================================

@@ -81,13 +81,21 @@ typedef struct {
     uint32_t         error_count;
     bool             valid;
 
-    /* Semantic fan-out tracking */
-    uint32_t         fanout_membership;    /* nodes with region derived */
-    uint32_t         fanout_scope;         /* nodes with scope derived */
-    uint32_t         fanout_effect_owner;  /* nodes with effect owner derived */
-    uint32_t         fanout_capability;    /* nodes with capability context derived */
-    uint32_t         fanout_dep_owner;     /* nodes with dependency owner derived */
-    uint32_t         fanout_visibility;    /* nodes with visibility derived */
+    /* Semantic fan-out: declared (potential) */
+    uint32_t         fanout_membership;    /* always = member_count */
+    uint32_t         fanout_scope;         /* declared: scope = region */
+    uint32_t         fanout_effect_owner;  /* declared: effects attributed to region */
+    uint32_t         fanout_capability;    /* declared: capability context = sealed ancestor */
+    uint32_t         fanout_dep_owner;     /* declared: edge boundary checks use region */
+    uint32_t         fanout_visibility;    /* declared: visibility boundary = region */
+
+    /* Semantic fan-out: consumed (empirically observed) */
+    uint32_t         consumed_membership;   /* always = member_count */
+    uint32_t         consumed_scope;        /* consumed by scope resolver */
+    uint32_t         consumed_effect_owner; /* consumed by effect collection */
+    uint32_t         consumed_capability;   /* consumed by capability check */
+    uint32_t         consumed_dep_owner;    /* consumed by boundary verification */
+    uint32_t         consumed_visibility;   /* consumed by visibility resolver */
 } ArcGeoResult;
 
 /* === API === */
@@ -115,5 +123,12 @@ bool arc_geo_verify_consistency(const ArcGraph* g, const ArcGeoResult* result);
 bool arc_geo_deformation_stable(ArcGraph* g,
                                 const ArcGeoLayout* before,
                                 const ArcGeoLayout* after);
+
+/* Measure which fan-out categories were actually consumed by downstream
+ * analysis. Call AFTER arc_arch_verify(). Populates the consumed_* fields
+ * in the result. arch may be NULL if no architecture spec exists. */
+void arc_geo_measure_consumed_fanout(ArcGeoResult* result,
+                                     const ArcGraph* g,
+                                     const ArcArchSpec* arch);
 
 #endif /* ARCANA_CONTAINMENT_H */

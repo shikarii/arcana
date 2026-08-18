@@ -82,13 +82,22 @@ TEST(test_geo_derive_basic) {
     ASSERT(result.members[0].region == r1);
     ASSERT(g.nodes[n].region == r1);
 
-    /* Semantic fan-out: all 6 consequences tracked */
+    /* Declared fan-out: all 6 potential consequences */
     ASSERT(result.fanout_membership == 1);
     ASSERT(result.fanout_scope == 1);
     ASSERT(result.fanout_effect_owner == 1);
     ASSERT(result.fanout_capability == 1);
     ASSERT(result.fanout_dep_owner == 1);
     ASSERT(result.fanout_visibility == 1);
+
+    /* Consumed fan-out: no arch spec -> only membership consumed */
+    arc_geo_measure_consumed_fanout(&result, &g, NULL);
+    ASSERT(result.consumed_membership == 1);
+    ASSERT(result.consumed_scope == 0);         /* no resolver */
+    ASSERT(result.consumed_effect_owner == 0);  /* no sealed region */
+    ASSERT(result.consumed_capability == 0);    /* no sealed region */
+    ASSERT(result.consumed_dep_owner == 0);     /* no cross-boundary edges */
+    ASSERT(result.consumed_visibility == 0);    /* no resolver */
 
     arc_graph_free(&g);
 }
@@ -164,10 +173,19 @@ TEST(test_L4_04_geo_pipeline_hidden_effect) {
     ASSERT(ar.error_count > 0);
     ASSERT(strstr(ar.errors[0].message, "Logger") != NULL);
 
-    /* Semantic fan-out: geometry derived membership for 5 positioned nodes */
+    /* Declared fan-out: 5 positioned nodes × 6 categories */
     ASSERT(gr.fanout_membership == 5);
     ASSERT(gr.fanout_scope == 5);
     ASSERT(gr.fanout_effect_owner == 5);
+
+    /* Consumed fan-out: real downstream consumption */
+    arc_geo_measure_consumed_fanout(&gr, &fr.graph, &fr.arch);
+    ASSERT(gr.consumed_membership == 5);         /* all 5 derived */
+    ASSERT(gr.consumed_effect_owner >= 2);       /* helper+route in sealed r_plan */
+    ASSERT(gr.consumed_capability >= 2);         /* sealed ancestor for r_plan nodes */
+    ASSERT(gr.consumed_dep_owner >= 1);          /* cross-boundary edges exist */
+    ASSERT(gr.consumed_scope == 0);              /* no scope resolver */
+    ASSERT(gr.consumed_visibility == 0);         /* no visibility resolver */
 
     arc_graph_free(&fr.graph);
 }
@@ -315,14 +333,74 @@ TEST(test_geo_fanout_measurement) {
     ASSERT(result.valid);
     ASSERT(result.member_count == 5);
 
-    /* Fan-out: 6 semantic facts derived for each of 5 nodes */
+    /* Declared fan-out: 6 potential categories × 5 nodes */
     ASSERT(result.fanout_membership == 5);
     ASSERT(result.fanout_scope == 5);
     ASSERT(result.fanout_effect_owner == 5);
     ASSERT(result.fanout_capability == 5);
     ASSERT(result.fanout_dep_owner == 5);
     ASSERT(result.fanout_visibility == 5);
-    /* Leverage = (5 * 6) / 5 = 6: one geometric relation drives 6 consequences */
+
+    /* Consumed fan-out: no arch spec, no edges -> only membership */
+    arc_geo_measure_consumed_fanout(&result, &g, NULL);
+    ASSERT(result.consumed_membership == 5);
+    ASSERT(result.consumed_effect_owner == 0);  /* no sealed regions */
+    ASSERT(result.consumed_capability == 0);
+    ASSERT(result.consumed_dep_owner == 0);     /* no edges */
+    ASSERT(result.consumed_scope == 0);
+    ASSERT(result.consumed_visibility == 0);
+    /* Declared leverage = 6×, consumed leverage = 1× (membership only) */
+    /* Real leverage requires downstream consumers (architecture verifier) */
+
+    arc_graph_free(&g);
+}
+
+/* --- Consumed fan-out with sealed region + cross-boundary edge --- */
+TEST(test_geo_consumed_fanout_with_verifier) {
+    ArcGraph g;
+    arc_graph_init(&g);
+    ArcRegionId r0 = arc_graph_add_region(&g, ARC_REGION_MODULE, ARC_INVALID_ID);
+    ArcRegionId r1 = arc_graph_add_region(&g, ARC_REGION_FUNCTION, r0);
+    g.root_region = r0;
+
+    /* Print node (Logger effect) — will be derived into r1 */
+    ArcNodeId n_print = arc_graph_add_node(&g, ARC_NODE_PRINT, r0, 0);
+    /* Const node in r0 — feeds into print across boundary */
+    ArcNodeId n_const = arc_graph_add_node(&g, ARC_NODE_CONST_INT, r0, 0);
+    /* Edge: const -> print (will cross boundary after derivation) */
+    ArcPortId p_out = arc_graph_add_port(&g, n_const, ARC_PORT_OUTPUT, "out");
+    ArcPortId p_in = arc_graph_add_port(&g, n_print, ARC_PORT_INPUT, "value");
+    arc_graph_add_edge(&g, p_out, p_in);
+
+    /* Seal r1 with no capabilities */
+    ArcArchSpec arch;
+    arc_arch_spec_init(&arch);
+    arc_arch_spec_add_sealed(&arch, r1, ARC_EFFECT_PURE);
+
+    /* Geometry: only print node positioned inside r1 */
+    ArcGeoLayout layout;
+    arc_geo_init(&layout);
+    arc_geo_add_circle(&layout, r1, 100, 100, 50);
+    arc_geo_add_position(&layout, n_print, 110, 110);
+
+    ArcGeoResult result = arc_geo_derive_regions(&g, &layout);
+    ASSERT(result.valid);
+    ASSERT(result.member_count == 1);
+    ASSERT(g.nodes[n_print].region == r1);
+
+    /* Verify: should fail (Logger undeclared in sealed r1) */
+    ArcArchResult ar = arc_arch_verify(&g, &arch);
+    ASSERT(!ar.valid);
+
+    /* Measure consumed fan-out */
+    arc_geo_measure_consumed_fanout(&result, &g, &arch);
+    ASSERT(result.consumed_membership == 1);     /* always */
+    ASSERT(result.consumed_effect_owner == 1);   /* sealed r1 walked */
+    ASSERT(result.consumed_capability == 1);     /* sealed ancestor */
+    ASSERT(result.consumed_dep_owner == 1);      /* edge crosses r0/r1 */
+    ASSERT(result.consumed_scope == 0);          /* no resolver */
+    ASSERT(result.consumed_visibility == 0);     /* no resolver */
+    /* Consumed leverage = 4× (out of 6 declared) */
 
     arc_graph_free(&g);
 }
