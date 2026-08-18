@@ -1,0 +1,19 @@
+; Level 3.07: Multiple effects declared and used — all covered
+; Region uses both Clock and Logger, both declared as capabilities.
+; Expected: PASS
+region r0 module
+region r_sensor function parent=r0
+
+sealed r_sensor
+capability r_sensor Clock
+capability r_sensor Logger
+
+; uses clock (intrinsic 1)
+node s_clk intrinsic_call(1) in r_sensor
+; uses print (Logger)
+node s_pr print in r_sensor
+edge e0 s_clk.out -> s_pr.value
+
+; return a constant
+node s_c1 const_int(1) in r_sensor
+root s_c1.out

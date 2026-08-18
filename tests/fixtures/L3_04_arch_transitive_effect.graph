@@ -1,0 +1,25 @@
+; Level 3.04: Transitive hidden effect — sealed region calls function that uses Logger
+; planner calls helper, helper calls print. Planner has no Logger capability.
+; Expected: FAIL — "sealed region requires undeclared capability Logger"
+region r0 module
+region r_plan function parent=r0
+region r_helper function parent=r0
+
+sealed r_plan
+
+; helper function: calls print (Logger effect)
+node hdef func_def(helper) in r0 body_region=r_helper arity=1
+node hp0 param(x) in r_helper
+node hpr print in r_helper
+node hpref var_ref(x) in r_helper
+edge e0 hpref.out -> hpr.value
+node hret return in r_helper
+node hc0 const_int(0) in r_helper
+edge e1 hc0.out -> hret.value
+
+; planner calls helper — transitively acquires Logger effect
+node q_c5 const_int(5) in r_plan
+node q_call func_call(helper) in r_plan
+edge e2 q_c5.out -> q_call.arg0
+
+root q_call.out

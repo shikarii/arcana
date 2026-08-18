@@ -1,0 +1,21 @@
+; Level 3.05: Declared channel — cross-boundary edge with explicit channel
+; Same as L3_03 but with channel declared. Should pass.
+; Expected: PASS
+region r0 module
+region r_percep function parent=r0
+region r_plan function parent=r0
+
+sealed r_percep
+sealed r_plan
+channel r_percep -> r_plan
+
+; perception produces a value
+node p_c42 const_int(42) in r_percep
+
+; planner consumes it — channel is declared
+node q_c1 const_int(1) in r_plan
+node q_add add in r_plan
+edge e0 p_c42.out -> q_add.lhs
+edge e1 q_c1.out -> q_add.rhs
+
+root q_add.out

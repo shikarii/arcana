@@ -11,18 +11,12 @@ int tests_passed = 0;
 int tests_failed = 0;
 
 /* --- test_runtime.c --- */
-extern void test_arena_basic(void);
-extern void test_arena_many_allocs(void);
-extern void test_arena_large_alloc(void);
-extern void test_typecheck_arithmetic_valid(void);
-extern void test_typecheck_bitwise_error(void);
-extern void test_typecheck_string_concat(void);
-extern void test_typecheck_cast_result_type(void);
-extern void test_typecheck_empty_graph(void);
-extern void test_type_name(void);
-extern void test_record_create_and_fields(void);
-extern void test_record_gc_tracing(void);
-extern void test_record_print(void);
+extern void test_arena_basic(void); extern void test_arena_many_allocs(void);
+extern void test_arena_large_alloc(void); extern void test_typecheck_arithmetic_valid(void);
+extern void test_typecheck_bitwise_error(void); extern void test_typecheck_string_concat(void);
+extern void test_typecheck_cast_result_type(void); extern void test_typecheck_empty_graph(void);
+extern void test_type_name(void); extern void test_record_create_and_fields(void);
+extern void test_record_gc_tracing(void); extern void test_record_print(void);
 extern void test_diag_type_code_format(void);
 
 /* --- test_bytecode.c --- */
@@ -45,29 +39,17 @@ extern void test_verifier_bad_jump_target(void);
 extern void test_verifier_stack_consistency(void);
 
 /* --- test_vm.c --- */
-extern void test_vm_add_5_10(void);
-extern void test_vm_arithmetic(void);
-extern void test_vm_comparisons(void);
-extern void test_vm_branch(void);
-extern void test_vm_locals(void);
-extern void test_vm_division_by_zero(void);
-extern void test_vm_stack_overflow(void);
-extern void test_clock_intrinsic(void);
-extern void test_vm_globals(void);
-extern void test_vm_string_const(void);
-extern void test_vm_string_concat(void);
-extern void test_vm_str_len(void);
-extern void test_vm_str_slice(void);
-extern void test_vm_str_index(void);
-extern void test_vm_bitwise_and(void);
-extern void test_vm_bitwise_or_xor(void);
-extern void test_vm_bitwise_not(void);
-extern void test_vm_shift(void);
-extern void test_vm_cast_i64(void);
-extern void test_vm_cast_f64(void);
-extern void test_vm_cast_str(void);
-extern void test_vm_cast_str_from_string(void);
-
+extern void test_vm_add_5_10(void); extern void test_vm_arithmetic(void);
+extern void test_vm_comparisons(void); extern void test_vm_branch(void);
+extern void test_vm_locals(void); extern void test_vm_division_by_zero(void);
+extern void test_vm_stack_overflow(void); extern void test_clock_intrinsic(void);
+extern void test_vm_globals(void); extern void test_vm_string_const(void);
+extern void test_vm_string_concat(void); extern void test_vm_str_len(void);
+extern void test_vm_str_slice(void); extern void test_vm_str_index(void);
+extern void test_vm_bitwise_and(void); extern void test_vm_bitwise_or_xor(void);
+extern void test_vm_bitwise_not(void); extern void test_vm_shift(void);
+extern void test_vm_cast_i64(void); extern void test_vm_cast_f64(void);
+extern void test_vm_cast_str(void); extern void test_vm_cast_str_from_string(void);
 /* --- test_vm_collections.c --- */
 extern void test_vm_array_new(void);
 extern void test_vm_index_get_set(void);
@@ -544,6 +526,14 @@ extern void test_L2_07_mutex_handoff(void); extern void test_L2_08_thread_factor
 extern void test_L2_09_producer_consumer(void); extern void test_L2_10_dining_philosophers(void);
 extern void test_L2_11_map_reduce(void);
 
+/* --- test_architecture.c --- */
+extern void test_L3_01_arch_valid(void); extern void test_L3_02_arch_hidden_effect(void);
+extern void test_L3_03_arch_hidden_edge(void); extern void test_L3_04_arch_transitive_effect(void);
+extern void test_L3_05_arch_declared_channel(void); extern void test_L3_06_arch_pure_internal(void);
+extern void test_L3_07_arch_multi_effect(void); extern void test_L3_08_arch_partial_capability(void);
+extern void test_arch_effect_lookup(void); extern void test_arch_effect_parse(void);
+extern void test_arch_spec_api(void);
+
 static void run_challenge_L2_tests(void) {
     printf("\n[Challenge Corpus Level 2: Concurrency]\n");
     RUN(test_L2_01_thread_return); RUN(test_L2_02_thread_args);
@@ -552,6 +542,15 @@ static void run_challenge_L2_tests(void) {
     RUN(test_L2_07_mutex_handoff); RUN(test_L2_08_thread_factorial);
     RUN(test_L2_09_producer_consumer); RUN(test_L2_10_dining_philosophers);
     RUN(test_L2_11_map_reduce);
+}
+
+static void run_architecture_tests(void) {
+    printf("\n[Challenge Corpus Level 3: Architecture Verification]\n");
+    RUN(test_arch_effect_lookup); RUN(test_arch_effect_parse); RUN(test_arch_spec_api);
+    RUN(test_L3_01_arch_valid); RUN(test_L3_02_arch_hidden_effect);
+    RUN(test_L3_03_arch_hidden_edge); RUN(test_L3_04_arch_transitive_effect);
+    RUN(test_L3_05_arch_declared_channel); RUN(test_L3_06_arch_pure_internal);
+    RUN(test_L3_07_arch_multi_effect); RUN(test_L3_08_arch_partial_capability);
 }
 
 static void run_concurrency_tests(void) {
@@ -591,6 +590,7 @@ int main(void) {
     run_challenge_L1_tests();
     run_concurrency_tests();
     run_challenge_L2_tests();
+    run_architecture_tests();
 
     printf("\n=== Results: %d/%d passed", tests_passed, tests_run);
     if (tests_failed > 0) printf(", %d FAILED", tests_failed);

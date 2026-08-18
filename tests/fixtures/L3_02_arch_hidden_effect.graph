@@ -1,0 +1,17 @@
+; Level 3.02: Hidden effect — sealed region uses clock without declaring it
+; planner is sealed with no capabilities but calls clock intrinsic
+; Expected: FAIL — "sealed region requires undeclared capability Clock"
+region r0 module
+region r_plan function parent=r0
+
+sealed r_plan
+; no capability declaration
+
+; planner uses clock (intrinsic id=1) without declaring Clock capability
+node q_clk intrinsic_call(1) in r_plan
+node q_c5 const_int(5) in r_plan
+node q_add add in r_plan
+edge e0 q_clk.out -> q_add.lhs
+edge e1 q_c5.out -> q_add.rhs
+
+root q_add.out

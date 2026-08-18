@@ -2,9 +2,10 @@
 #define ARCANA_FIXTURE_PARSER_H
 
 #include "semantic_graph.h"
+#include "../verifier/architecture.h"
 
 /*
- * Parse a text fixture into an ArcGraph.
+ * Parse a text fixture into an ArcGraph + optional architecture spec.
  *
  * Format:
  *   region <id> <kind> [parent=<id>]
@@ -12,20 +13,18 @@
  *   edge <id> <node_id>.<port_role> -> <node_id>.<port_role>
  *   root <node_id>.<port_role>
  *
- * Example:
- *   region r0 module
- *   node n0 const_int(5) in r0
- *   node n1 const_int(10) in r0
- *   node n2 add in r0 ports=[lhs,rhs,out] cyclic=[lhs,rhs,out]
- *   edge e0 n0.out -> n2.lhs
- *   edge e1 n1.out -> n2.rhs
- *   root n2.out
+ * Architecture extensions:
+ *   sealed <region_id>
+ *   capability <region_id> <effect_name>
+ *   channel <region_id> -> <region_id>
  */
 
 typedef struct {
-    ArcGraph   graph;
-    char       error[256];
-    bool       success;
+    ArcGraph    graph;
+    ArcArchSpec arch;
+    char        error[256];
+    bool        success;
+    bool        has_arch;    /* true if any sealed/capability/channel commands present */
 } ArcFixtureResult;
 
 /* Parse fixture text (null-terminated) into a graph */

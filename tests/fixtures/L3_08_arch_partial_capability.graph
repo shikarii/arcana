@@ -1,0 +1,17 @@
+; Level 3.08: Partial capability — has Clock but also uses Logger undeclared
+; Region declares Clock but also calls print (Logger) without declaring it.
+; Expected: FAIL — "sealed region requires undeclared capability Logger"
+region r0 module
+region r_sensor function parent=r0
+
+sealed r_sensor
+capability r_sensor Clock
+
+; uses clock (ok — declared)
+node s_clk intrinsic_call(1) in r_sensor
+; uses print (NOT ok — Logger not declared)
+node s_pr print in r_sensor
+edge e0 s_clk.out -> s_pr.value
+
+node s_c1 const_int(1) in r_sensor
+root s_c1.out
